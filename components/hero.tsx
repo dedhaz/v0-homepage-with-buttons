@@ -5,13 +5,6 @@ import { ArrowRight } from "lucide-react"
 export function Hero() {
   return (
     <section className="relative flex flex-col items-center px-6 pb-24 pt-20 text-center md:pt-32 md:pb-32">
-      <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5">
-        <span className="h-2 w-2 rounded-full bg-emerald-500" />
-        <span className="text-sm text-muted-foreground">
-          Новая версия 2.0 уже доступна
-        </span>
-      </div>
-
       <h1 className="max-w-3xl text-balance font-display text-4xl font-bold leading-tight tracking-tight text-foreground md:text-6xl md:leading-tight">
         Сделаем процесс закупки товаров в Китае простым и понятным
       </h1>

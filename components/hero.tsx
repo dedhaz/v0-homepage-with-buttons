@@ -15,10 +15,10 @@ export function Hero() {
 
       <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row">
         <Button size="lg" className="gap-2 px-8" asChild>
-          <Link href="/register">
-            Начать бесплатно
+          <a href="https://t.me/sklad13white" target="_blank" rel="noopener noreferrer">
+            Связаться с нами
             <ArrowRight className="h-4 w-4" />
-          </Link>
+          </a>
         </Button>
         <Button variant="outline" size="lg" className="px-8" asChild>
           <Link href="#features">Узнать больше</Link>

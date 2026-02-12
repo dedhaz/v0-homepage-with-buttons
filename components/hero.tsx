@@ -13,7 +13,7 @@ export function Hero() {
       </div>
 
       <h1 className="max-w-3xl text-balance font-display text-4xl font-bold leading-tight tracking-tight text-foreground md:text-6xl md:leading-tight">
-        Управляйте проектами на скорости мысли
+        Сделаем процесс закупки товаров в Китае простым и понятным
       </h1>
 
       <p className="mt-6 max-w-xl text-pretty text-base leading-relaxed text-muted-foreground md:text-lg">

@@ -5,12 +5,18 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/60 bg-background/80 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-            <span className="text-sm font-bold text-primary-foreground">M</span>
+        <Link href="/" className="group relative flex items-center gap-2.5" aria-label="Склад 13 — Доставка товаров из Китая под ключ">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
+            <span className="text-base font-bold text-primary-foreground">13</span>
           </div>
           <span className="text-lg font-bold font-display tracking-tight text-foreground">
-            Momentum
+            Склад 13
+          </span>
+          <span
+            className="pointer-events-none absolute left-0 top-full mt-2 w-max max-w-xs rounded-md bg-foreground px-3 py-1.5 text-xs text-background opacity-0 shadow-lg transition-opacity duration-200 group-hover:opacity-100"
+            role="tooltip"
+          >
+            Доставка товаров из Китая под ключ
           </span>
         </Link>
 

@@ -29,6 +29,8 @@ export function CalculatorForm() {
   const [goods, setGoods] = useState({
     productName: "",
     quantity: "",
+    pricePerUnit: "",
+    currency: "RUB",
     weight: "",
     volume: "",
     link: "",
@@ -219,6 +221,27 @@ export function CalculatorForm() {
                   value={goods.quantity}
                   onChange={(e) => setGoods({ ...goods, quantity: e.target.value })}
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pricePerUnit">Цена за 1 шт.</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="pricePerUnit"
+                    placeholder="150"
+                    value={goods.pricePerUnit}
+                    onChange={(e) => setGoods({ ...goods, pricePerUnit: e.target.value })}
+                    className="flex-1"
+                  />
+                  <select
+                    value={goods.currency}
+                    onChange={(e) => setGoods({ ...goods, currency: e.target.value })}
+                    className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                  >
+                    <option value="RUB">Рубли</option>
+                    <option value="CNY">Юани</option>
+                    <option value="USD">Доллары</option>
+                  </select>
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="weight">Вес (кг)</Label>
@@ -442,6 +465,17 @@ export function CalculatorForm() {
                       <dd className="font-medium text-foreground">{goods.quantity}</dd>
                     </div>
                   )}
+                  {goods.pricePerUnit && (
+                    <div>
+                      <dt className="text-muted-foreground">Цена за 1 шт.</dt>
+                      <dd className="font-medium text-foreground">
+                        {goods.pricePerUnit}{" "}
+                        {goods.currency === "RUB" && "руб."}
+                        {goods.currency === "CNY" && "юань"}
+                        {goods.currency === "USD" && "$"}
+                      </dd>
+                    </div>
+                  )}
                   {goods.weight && (
                     <div>
                       <dt className="text-muted-foreground">Вес</dt>
@@ -512,7 +546,7 @@ export function CalculatorForm() {
               >
                 <a
                   href={`https://t.me/sklad13white?text=${encodeURIComponent(
-                    `Заявка на расчет доставки\n\nИмя: ${contacts.name}\nТелефон: ${contacts.phone}\nTelegram: ${contacts.telegram}\nEmail: ${contacts.email}\nКомментарий: ${contacts.comment}\n\nТовар: ${goods.productName}\nКоличество: ${goods.quantity}\nВес: ${goods.weight} кг\nОбъем: ${goods.volume} м³\nСсылка: ${goods.link}\n\nПоиск поставщика: ${delivery.needSupplier}\nИмпортер: ${delivery.importerContract}\nСпособ доставки: ${delivery.deliveryMethod}\nДокументы: ${delivery.permits}`
+                    `Заявка на расчет доставки\n\nИмя: ${contacts.name}\nТелефон: ${contacts.phone}\nTelegram: ${contacts.telegram}\nEmail: ${contacts.email}\nКомментарий: ${contacts.comment}\n\nТовар: ${goods.productName}\nКоличество: ${goods.quantity}\nЦена за 1 шт: ${goods.pricePerUnit} ${goods.currency === "RUB" ? "руб." : goods.currency === "CNY" ? "юань" : "$"}\nВес: ${goods.weight} кг\nОбъем: ${goods.volume} м³\nСсылка: ${goods.link}\n\nПоиск поставщика: ${delivery.needSupplier}\nИмпортер: ${delivery.importerContract}\nСпособ доставки: ${delivery.deliveryMethod}\nДокументы: ${delivery.permits}`
                   )}`}
                   target="_blank"
                   rel="noopener noreferrer"

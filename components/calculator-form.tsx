@@ -26,6 +26,8 @@ export function CalculatorForm() {
     comment: "",
   })
 
+  const [weightMode, setWeightMode] = useState<"batch" | "unit">("batch")
+
   const [goods, setGoods] = useState({
     productName: "",
     quantity: "",
@@ -243,20 +245,51 @@ export function CalculatorForm() {
                   </select>
                 </div>
               </div>
+              <div className="col-span-full">
+                <Label className="mb-2 block">Вес / Объем указаны за</Label>
+                <div className="flex rounded-lg border border-border bg-background p-1">
+                  <button
+                    type="button"
+                    onClick={() => setWeightMode("batch")}
+                    className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                      weightMode === "batch"
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Партия
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWeightMode("unit")}
+                    className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                      weightMode === "unit"
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Штука
+                  </button>
+                </div>
+              </div>
               <div className="space-y-2">
-                <Label htmlFor="weight">Вес (кг)</Label>
+                <Label htmlFor="weight">
+                  {weightMode === "batch" ? "Вес партии (кг)" : "Вес 1 шт. (кг)"}
+                </Label>
                 <Input
                   id="weight"
-                  placeholder="500"
+                  placeholder={weightMode === "batch" ? "500" : "0.5"}
                   value={goods.weight}
                   onChange={(e) => setGoods({ ...goods, weight: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="volume">{"Объем (м\u00B3)"}</Label>
+                <Label htmlFor="volume">
+                  {weightMode === "batch" ? "Объем партии (м\u00B3)" : "Объем 1 шт. (м\u00B3)"}
+                </Label>
                 <Input
                   id="volume"
-                  placeholder="2.5"
+                  placeholder={weightMode === "batch" ? "2.5" : "0.01"}
                   value={goods.volume}
                   onChange={(e) => setGoods({ ...goods, volume: e.target.value })}
                 />
@@ -478,13 +511,17 @@ export function CalculatorForm() {
                   )}
                   {goods.weight && (
                     <div>
-                      <dt className="text-muted-foreground">Вес</dt>
+                      <dt className="text-muted-foreground">
+                        {weightMode === "batch" ? "Вес партии" : "Вес 1 шт."}
+                      </dt>
                       <dd className="font-medium text-foreground">{goods.weight} кг</dd>
                     </div>
                   )}
                   {goods.volume && (
                     <div>
-                      <dt className="text-muted-foreground">Объем</dt>
+                      <dt className="text-muted-foreground">
+                        {weightMode === "batch" ? "Объем партии" : "Объем 1 шт."}
+                      </dt>
                       <dd className="font-medium text-foreground">{goods.volume} {"\u043C\u00B3"}</dd>
                     </div>
                   )}
@@ -546,7 +583,7 @@ export function CalculatorForm() {
               >
                 <a
                   href={`https://t.me/sklad13white?text=${encodeURIComponent(
-                    `Заявка на расчет доставки\n\nИмя: ${contacts.name}\nТелефон: ${contacts.phone}\nTelegram: ${contacts.telegram}\nEmail: ${contacts.email}\nКомментарий: ${contacts.comment}\n\nТовар: ${goods.productName}\nКоличество: ${goods.quantity}\nЦена за 1 шт: ${goods.pricePerUnit} ${goods.currency === "RUB" ? "руб." : goods.currency === "CNY" ? "юань" : "$"}\nВес: ${goods.weight} кг\nОбъем: ${goods.volume} м³\nСсылка: ${goods.link}\n\nПоиск поставщика: ${delivery.needSupplier}\nИмпортер: ${delivery.importerContract}\nСпособ доставки: ${delivery.deliveryMethod}\nДокументы: ${delivery.permits}`
+                    `Заявка на расчет доставки\n\nИмя: ${contacts.name}\nТелефон: ${contacts.phone}\nTelegram: ${contacts.telegram}\nEmail: ${contacts.email}\nКомментарий: ${contacts.comment}\n\nТовар: ${goods.productName}\nКоличество: ${goods.quantity}\nЦена за 1 шт: ${goods.pricePerUnit} ${goods.currency === "RUB" ? "руб." : goods.currency === "CNY" ? "юань" : "$"}\n${weightMode === "batch" ? "Вес партии" : "Вес 1 шт."}: ${goods.weight} кг\n${weightMode === "batch" ? "Объем партии" : "Объем 1 шт."}: ${goods.volume} м³\nСсылка: ${goods.link}\n\nПоиск поставщика: ${delivery.needSupplier}\nИмпортер: ${delivery.importerContract}\nСпособ доставки: ${delivery.deliveryMethod}\nДокументы: ${delivery.permits}`
                   )}`}
                   target="_blank"
                   rel="noopener noreferrer"

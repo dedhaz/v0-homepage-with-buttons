@@ -51,6 +51,37 @@ export function CalculatorForm() {
   const nextStep = () => setStep((s) => Math.min(s + 1, 4))
   const prevStep = () => setStep((s) => Math.max(s - 1, 1))
 
+  const parseNumber = (value: string) => {
+    const normalized = value.replace(/\s/g, "").replace(",", ".").replace(/[^\d.-]/g, "")
+    const parsed = Number(normalized)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+
+  const quantityNumber = parseNumber(goods.quantity)
+  const pricePerUnitNumber = parseNumber(goods.pricePerUnit)
+  const weightNumber = parseNumber(goods.weight)
+  const volumeNumber = parseNumber(goods.volume)
+
+  const totalAmount =
+    quantityNumber !== null && pricePerUnitNumber !== null ? quantityNumber * pricePerUnitNumber : null
+  const totalWeight =
+    weightNumber !== null
+      ? weightMode === "unit" && quantityNumber !== null
+        ? weightNumber * quantityNumber
+        : weightNumber
+      : null
+  const totalVolume =
+    volumeNumber !== null
+      ? weightMode === "unit" && quantityNumber !== null
+        ? volumeNumber * quantityNumber
+        : volumeNumber
+      : null
+
+  const formatNumber = (value: number) =>
+    new Intl.NumberFormat("ru-RU", {
+      maximumFractionDigits: 3,
+    }).format(value)
+
   return (
     <div className="grid gap-8 md:grid-cols-[280px_1fr]">
       {/* Left: Step navigation */}

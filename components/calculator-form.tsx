@@ -637,7 +637,7 @@ export function CalculatorForm() {
               >
                 <a
                   href={`https://t.me/sklad13white?text=${encodeURIComponent(
-                    `Заявка на расчет доставки
+                   `Заявка на расчет доставки
 
 Имя: ${contacts.name}
 Телефон: ${contacts.phone}
@@ -658,8 +658,8 @@ ${weightMode === "batch" ? "Объем партии" : "Объем 1 шт."}: ${
 Поиск поставщика: ${delivery.needSupplier}
 Импортер: ${delivery.importerContract}
 Способ доставки: ${delivery.deliveryMethod}
-Документы: ${delivery.permits}`
-                  )}`}
+Документы: ${delivery.permits}`  
+                    )}`}
                   target="_blank"
                   rel="noopener noreferrer"
                 >

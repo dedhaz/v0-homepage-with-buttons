@@ -556,6 +556,29 @@ export function CalculatorForm() {
                       <dd className="font-medium text-foreground">{goods.volume} {"\u043C\u00B3"}</dd>
                     </div>
                   )}
+                  {totalAmount !== null && (
+                    <div>
+                      <dt className="text-muted-foreground">Сумма</dt>
+                      <dd className="font-medium text-foreground">
+                        {formatNumber(totalAmount)}{" "}
+                        {goods.currency === "RUB" && "руб."}
+                        {goods.currency === "CNY" && "юань"}
+                        {goods.currency === "USD" && "$"}
+                      </dd>
+                    </div>
+                  )}
+                  {totalWeight !== null && (
+                    <div>
+                      <dt className="text-muted-foreground">Итого вес</dt>
+                      <dd className="font-medium text-foreground">{formatNumber(totalWeight)} кг</dd>
+                    </div>
+                  )}
+                  {totalVolume !== null && (
+                    <div>
+                      <dt className="text-muted-foreground">Итого объем</dt>
+                      <dd className="font-medium text-foreground">{formatNumber(totalVolume)} м³</dd>
+                    </div>
+                  )}
                 </dl>
               </div>
 
@@ -614,8 +637,29 @@ export function CalculatorForm() {
               >
                 <a
                   href={`https://t.me/sklad13white?text=${encodeURIComponent(
-                    `Заявка на расчет доставки\n\nИмя: ${contacts.name}\nТелефон: ${contacts.phone}\nTelegram: ${contacts.telegram}\nEmail: ${contacts.email}\nКомментарий: ${contacts.comment}\n\nТовар: ${goods.productName}\nКоличество: ${goods.quantity}\nЦена за 1 шт: ${goods.pricePerUnit} ${goods.currency === "RUB" ? "руб." : goods.currency === "CNY" ? "юань" : "$"}\n${weightMode === "batch" ? "Вес партии" : "Вес 1 шт."}: ${goods.weight} кг\n${weightMode === "batch" ? "Объем партии" : "Объем 1 шт."}: ${goods.volume} м³\nСсылка: ${goods.link}\n\nПоиск поставщика: ${delivery.needSupplier}\nИмпортер: ${delivery.importerContract}\nСпособ доставки: ${delivery.deliveryMethod}\nДокументы: ${delivery.permits}`
-                  )}`}
+                   `Заявка на расчет доставки
+
+Имя: ${contacts.name}
+Телефон: ${contacts.phone}
+Telegram: ${contacts.telegram}
+Email: ${contacts.email}
+Комментарий: ${contacts.comment}
+
+Товар: ${goods.productName}
+Количество: ${goods.quantity}
+Цена за 1 шт: ${goods.pricePerUnit} ${goods.currency === "RUB" ? "руб." : goods.currency === "CNY" ? "юань" : "$"}
+${weightMode === "batch" ? "Вес партии" : "Вес 1 шт."}: ${goods.weight} кг
+${weightMode === "batch" ? "Объем партии" : "Объем 1 шт."}: ${goods.volume} м³
+Сумма: ${totalAmount !== null ? `${formatNumber(totalAmount)} ${goods.currency === "RUB" ? "руб." : goods.currency === "CNY" ? "юань" : "$"}` : "не указана"}
+Итого вес: ${totalWeight !== null ? `${formatNumber(totalWeight)} кг` : "не указан"}
+Итого объем: ${totalVolume !== null ? `${formatNumber(totalVolume)} м³` : "не указан"}
+Ссылка: ${goods.link}
+
+Поиск поставщика: ${delivery.needSupplier}
+Импортер: ${delivery.importerContract}
+Способ доставки: ${delivery.deliveryMethod}
+Документы: ${delivery.permits}`  
+                    )}`}
                   target="_blank"
                   rel="noopener noreferrer"
                 >

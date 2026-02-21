@@ -2,12 +2,15 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Eye, EyeOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { startRegistration } from "@/lib/auth-storage"
 
 export function RegisterForm() {
+  const router = useRouter()
   const [form, setForm] = useState({
     email: "",
     password: "",
@@ -19,6 +22,8 @@ export function RegisterForm() {
   const [consentChecked, setConsentChecked] = useState(false)
   const [privacyChecked, setPrivacyChecked] = useState(false)
   const [termsChecked, setTermsChecked] = useState(false)
+  const [error, setError] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const passwordsMatch = form.password === form.confirmPassword
   const allFieldsFilled =
@@ -29,10 +34,30 @@ export function RegisterForm() {
   const canSubmit =
     allFieldsFilled && passwordsMatch && consentChecked && privacyChecked && termsChecked
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!canSubmit) return
-    // Registration logic here
+
+    setIsSubmitting(true)
+    setError("")
+
+    const result = await startRegistration({
+      email: form.email.trim(),
+      password: form.password,
+      fullName: form.fullName.trim(),
+    })
+
+    if (!result.ok) {
+      setError(result.error ?? "Ошибка регистрации")
+      setIsSubmitting(false)
+      return
+    }
+
+    if (result.demoCode) {
+      window.sessionStorage.setItem("last_verification_code", result.demoCode)
+    }
+
+    router.push(`/register/verify?email=${encodeURIComponent(form.email.trim())}`)
   }
 
   return (
@@ -168,9 +193,11 @@ export function RegisterForm() {
             </label>
           </div>
 
+          {error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+
           <div className="flex flex-col gap-3 pt-2">
-            <Button type="submit" size="lg" className="w-full" disabled={!canSubmit}>
-              Зарегистрироваться
+            <Button type="submit" size="lg" className="w-full" disabled={!canSubmit || isSubmitting}>
+              {isSubmitting ? "Отправка..." : "Зарегистрироваться"}
             </Button>
             <Button variant="ghost" size="sm" className="w-full" asChild>
               <Link href="/login">У меня уже есть аккаунт</Link>

@@ -10,6 +10,7 @@ import {
   Wallet,
   Settings,
   LogOut,
+  Factory,
 } from "lucide-react"
 
 import {
@@ -28,6 +29,7 @@ import {
 
 const navItems = [
   { title: "Клиенты", href: "/admin/clients", icon: Users },
+  { title: "Поставщики", href: "/admin/suppliers", icon: Factory },
   { title: "Сделки", href: "/admin/deals", icon: Handshake },
   { title: "Доставки", href: "/admin/deliveries", icon: Truck },
   { title: "Товары", href: "/admin/products", icon: Package },

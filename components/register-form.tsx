@@ -34,26 +34,29 @@ export function RegisterForm() {
   const canSubmit =
     allFieldsFilled && passwordsMatch && consentChecked && privacyChecked && termsChecked
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!canSubmit) return
 
     setIsSubmitting(true)
     setError("")
 
-    const result = startRegistration({
+    const result = await startRegistration({
       email: form.email.trim(),
       password: form.password,
       fullName: form.fullName.trim(),
     })
 
     if (!result.ok) {
-      setError(result.error)
+      setError(result.error ?? "Ошибка регистрации")
       setIsSubmitting(false)
       return
     }
 
-    window.sessionStorage.setItem("last_verification_code", result.code)
+    if (result.demoCode) {
+      window.sessionStorage.setItem("last_verification_code", result.demoCode)
+    }
+
     router.push(`/register/verify?email=${encodeURIComponent(form.email.trim())}`)
   }
 

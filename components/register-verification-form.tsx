@@ -16,28 +16,32 @@ export function RegisterVerificationForm() {
   const [demoCode, setDemoCode] = useState<string | null>(null)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
     setDemoCode(window.sessionStorage.getItem("last_verification_code"))
   }, [])
 
-  const handleVerify = (e: React.FormEvent) => {
+  const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email) {
       setError("E-mail не найден. Вернитесь на страницу регистрации.")
       return
     }
 
-    const result = verifyRegistrationCode(email, code.trim())
+    setIsSubmitting(true)
+    const result = await verifyRegistrationCode({ email, code: code.trim() })
+
     if (!result.ok) {
-      setError(result.error)
+      setError(result.error ?? "Не удалось подтвердить код.")
       setSuccess("")
+      setIsSubmitting(false)
       return
     }
 
     setError("")
     window.sessionStorage.removeItem("last_verification_code")
-    setSuccess(`Аккаунт создан. Ваш ID: ${result.user.id}. Роль: обычный пользователь.`)
+    setSuccess(`Аккаунт создан. Ваш ID: ${result.user?.id}. Роль: обычный пользователь.`)
 
     setTimeout(() => {
       router.push("/login")
@@ -81,8 +85,8 @@ export function RegisterVerificationForm() {
           {success && <p className="rounded-md bg-green-600/10 px-3 py-2 text-sm text-green-700">{success}</p>}
 
           <div className="flex flex-col gap-3 pt-2">
-            <Button type="submit" className="w-full" disabled={code.trim().length === 0}>
-              Подтвердить и создать аккаунт
+            <Button type="submit" className="w-full" disabled={code.trim().length === 0 || isSubmitting}>
+              {isSubmitting ? "Проверка..." : "Подтвердить и создать аккаунт"}
             </Button>
             <Button variant="ghost" className="w-full" asChild>
               <Link href="/register">Вернуться к регистрации</Link>

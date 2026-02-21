@@ -1,146 +1,73 @@
-export type UserRole = "admin" | "user"
-
-export interface RegisteredUser {
-  id: number
+export interface StartRegistrationPayload {
   email: string
   password: string
   fullName: string
-  role: UserRole
-  createdAt: string
-  verifiedAt: string
 }
 
-interface PendingRegistration {
+export interface StartRegistrationResult {
+  ok: boolean
+  error?: string
+  demoCode?: string
+}
+
+export interface VerifyRegistrationPayload {
   email: string
-  password: string
-  fullName: string
   code: string
-  createdAt: string
-  expiresAt: string
 }
 
-const USERS_KEY = "app_users"
-const PENDING_KEY = "app_pending_registrations"
-const CODE_TTL_MS = 10 * 60 * 1000
-
-function isBrowser() {
-  return typeof window !== "undefined"
+export interface VerifyRegistrationResult {
+  ok: boolean
+  error?: string
+  user?: {
+    id: number
+    role: "user" | "admin"
+  }
 }
 
-function loadUsers(): RegisteredUser[] {
-  if (!isBrowser()) return []
-
-  const raw = window.localStorage.getItem(USERS_KEY)
-  if (!raw) return []
-
+async function parseJsonSafe<T>(response: Response): Promise<T | null> {
   try {
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? (parsed as RegisteredUser[]) : []
+    return (await response.json()) as T
   } catch {
-    return []
+    return null
   }
 }
 
-function saveUsers(users: RegisteredUser[]) {
-  if (!isBrowser()) return
-  window.localStorage.setItem(USERS_KEY, JSON.stringify(users))
-}
-
-function loadPending(): PendingRegistration[] {
-  if (!isBrowser()) return []
-
-  const raw = window.localStorage.getItem(PENDING_KEY)
-  if (!raw) return []
-
-  try {
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? (parsed as PendingRegistration[]) : []
-  } catch {
-    return []
-  }
-}
-
-function savePending(items: PendingRegistration[]) {
-  if (!isBrowser()) return
-  window.localStorage.setItem(PENDING_KEY, JSON.stringify(items))
-}
-
-function generateCode() {
-  return Math.floor(100000 + Math.random() * 900000).toString()
-}
-
-export function startRegistration(payload: {
-  email: string
-  password: string
-  fullName: string
-}) {
-  const users = loadUsers()
-  const hasExistingAccount = users.some(
-    (user) => user.email.toLowerCase() === payload.email.toLowerCase(),
-  )
-
-  if (hasExistingAccount) {
-    return { ok: false as const, error: "Пользователь с таким e-mail уже существует." }
-  }
-
-  const pending = loadPending().filter(
-    (item) => item.email.toLowerCase() !== payload.email.toLowerCase(),
-  )
-
-  const code = generateCode()
-  const now = new Date()
-
-  pending.push({
-    email: payload.email,
-    password: payload.password,
-    fullName: payload.fullName,
-    code,
-    createdAt: now.toISOString(),
-    expiresAt: new Date(now.getTime() + CODE_TTL_MS).toISOString(),
+export async function startRegistration(payload: StartRegistrationPayload): Promise<StartRegistrationResult> {
+  const response = await fetch("/api/register/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   })
 
-  savePending(pending)
+  const result = await parseJsonSafe<StartRegistrationResult>(response)
 
-  return { ok: true as const, code }
-}
-
-export function verifyRegistrationCode(email: string, code: string) {
-  const pending = loadPending()
-  const match = pending.find(
-    (item) => item.email.toLowerCase() === email.toLowerCase(),
-  )
-
-  if (!match) {
-    return { ok: false as const, error: "Заявка на регистрацию не найдена." }
-  }
-
-  if (new Date(match.expiresAt).getTime() < Date.now()) {
-    savePending(pending.filter((item) => item.email.toLowerCase() !== email.toLowerCase()))
+  if (!response.ok) {
     return {
-      ok: false as const,
-      error: "Срок действия кода истек. Отправьте форму регистрации заново.",
+      ok: false,
+      error: result?.error ?? "Не удалось отправить заявку на регистрацию.",
     }
   }
 
-  if (match.code !== code) {
-    return { ok: false as const, error: "Неверный код подтверждения." }
+  return result ?? { ok: false, error: "Пустой ответ сервера." }
+}
+
+export async function verifyRegistrationCode(
+  payload: VerifyRegistrationPayload,
+): Promise<VerifyRegistrationResult> {
+  const response = await fetch("/api/register/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+
+  const result = await parseJsonSafe<VerifyRegistrationResult>(response)
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      error: result?.error ?? "Не удалось подтвердить код.",
+    }
   }
 
-  const users = loadUsers()
-  const nextId = users.length === 0 ? 1 : Math.max(...users.map((user) => user.id)) + 1
-
-  const newUser: RegisteredUser = {
-    id: nextId,
-    email: match.email,
-    password: match.password,
-    fullName: match.fullName,
-    role: "user",
-    createdAt: match.createdAt,
-    verifiedAt: new Date().toISOString(),
-  }
-
-  saveUsers([...users, newUser])
-  savePending(pending.filter((item) => item.email.toLowerCase() !== email.toLowerCase()))
-
-  return { ok: true as const, user: newUser }
+  return result ?? { ok: false, error: "Пустой ответ сервера." }
 }

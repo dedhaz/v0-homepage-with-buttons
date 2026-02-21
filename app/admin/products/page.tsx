@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useRef } from "react"
+import { useState, useMemo, useRef, useEffect } from "react"
 import {
   Table,
   TableBody,
@@ -41,7 +41,9 @@ interface Product {
   composition: string
   tnved: string
   priceSupplier: string
+  currencySupplier: "CNY" | "USD" | "RUB"
   priceSale: string
+  currencySale: "CNY" | "USD" | "RUB"
   dimUnit: ProductDimensions
   weightNettoUnit: string
   weightBruttoUnit: string
@@ -66,7 +68,9 @@ const emptyProduct: Omit<Product, "id"> = {
   composition: "",
   tnved: "",
   priceSupplier: "",
+  currencySupplier: "CNY",
   priceSale: "",
+  currencySale: "CNY",
   dimUnit: { ...emptyDim },
   weightNettoUnit: "",
   weightBruttoUnit: "",
@@ -104,12 +108,14 @@ const seedProducts: Product[] = [
     barcode: "4607012345678",
     composition: "Алюминиевый корпус, LED чипы SMD2835, рассеиватель PMMA",
     tnved: "9405 42 310 0",
-    priceSupplier: "12.50",
+    priceSupplier: "90",
+    currencySupplier: "CNY",
     priceSale: "24.00",
-    dimUnit: { length: "600", width: "600", height: "12" },
+    currencySale: "USD",
+    dimUnit: { length: "60", width: "60", height: "1.2" },
     weightNettoUnit: "2.8",
     weightBruttoUnit: "3.2",
-    dimPackage: { length: "650", width: "650", height: "280" },
+    dimPackage: { length: "65", width: "65", height: "28" },
     weightNettoPackage: "14.0",
     weightBruttoPackage: "16.5",
     qtyInPackage: "5",
@@ -127,12 +133,14 @@ const seedProducts: Product[] = [
     barcode: "4607098765432",
     composition: "100% хлопок, плотность 120 г/м2",
     tnved: "5208 11 100 0",
-    priceSupplier: "85.00",
+    priceSupplier: "610",
+    currencySupplier: "CNY",
     priceSale: "145.00",
-    dimUnit: { length: "1500", width: "300", height: "300" },
+    currencySale: "USD",
+    dimUnit: { length: "150", width: "30", height: "30" },
     weightNettoUnit: "12.0",
     weightBruttoUnit: "13.0",
-    dimPackage: { length: "1550", width: "350", height: "350" },
+    dimPackage: { length: "155", width: "35", height: "35" },
     weightNettoPackage: "13.0",
     weightBruttoPackage: "14.5",
     qtyInPackage: "1",
@@ -142,13 +150,25 @@ const seedProducts: Product[] = [
 ]
 
 /* ========== helpers ========== */
-function calcVolumeMm(d: ProductDimensions): string {
+type Currency = "CNY" | "USD" | "RUB"
+
+const CURRENCY_LABELS: Record<Currency, string> = { CNY: "\u00A5", USD: "$", RUB: "\u20BD" }
+
+function calcVolumeCm(d: ProductDimensions): string {
   const l = parseFloat(d.length)
   const w = parseFloat(d.width)
   const h = parseFloat(d.height)
-  if (isNaN(l) || isNaN(w) || isNaN(h) || l === 0 || w === 0 || h === 0) return "—"
-  const m3 = (l * w * h) / 1_000_000_000
+  if (isNaN(l) || isNaN(w) || isNaN(h) || l === 0 || w === 0 || h === 0) return "\u2014"
+  const m3 = (l * w * h) / 1_000_000
   return m3.toFixed(6) + " m\u00B3"
+}
+
+function convertToRub(price: string, currency: Currency, rates: { usd: number; cny: number }): string {
+  const v = parseFloat(price)
+  if (isNaN(v) || v === 0) return "\u2014"
+  if (currency === "RUB") return v.toFixed(2) + " \u20BD"
+  if (currency === "USD") return (v * rates.usd).toFixed(2) + " \u20BD"
+  return (v * rates.cny).toFixed(2) + " \u20BD"
 }
 
 /* ========== autocomplete component ========== */
@@ -214,9 +234,23 @@ export default function ProductsPage() {
   const photoInputRef = useRef<HTMLInputElement>(null)
   const docInputRef = useRef<HTMLInputElement>(null)
 
+  /* CBR exchange rates */
+  const [rates, setRates] = useState({ usd: 88.50, cny: 12.20 })
+
+  useEffect(() => {
+    fetch("https://www.cbr-xml-daily.ru/daily_json.js")
+      .then((r) => r.json())
+      .then((data) => {
+        const usd = data?.Valute?.USD?.Value ?? 88.50
+        const cny = data?.Valute?.CNY?.Value ?? 12.20
+        setRates({ usd, cny })
+      })
+      .catch(() => { /* keep default rates */ })
+  }, [])
+
   /* computed volumes */
-  const volumeUnit = useMemo(() => calcVolumeMm(form.dimUnit), [form.dimUnit])
-  const volumePackage = useMemo(() => calcVolumeMm(form.dimPackage), [form.dimPackage])
+  const volumeUnit = useMemo(() => calcVolumeCm(form.dimUnit), [form.dimUnit])
+  const volumePackage = useMemo(() => calcVolumeCm(form.dimPackage), [form.dimPackage])
 
   function openNew() {
     setEditingId(null)
@@ -351,8 +385,8 @@ export default function ProductsPage() {
                 <TableCell className="font-medium">{p.nameRu}</TableCell>
                 <TableCell className="font-mono text-sm">{p.tnved}</TableCell>
                 <TableCell>{p.owner}</TableCell>
-                <TableCell className="text-right">{p.priceSupplier} $</TableCell>
-                <TableCell className="text-right">{p.priceSale} $</TableCell>
+                <TableCell className="text-right">{p.priceSupplier} {CURRENCY_LABELS[p.currencySupplier]}</TableCell>
+                <TableCell className="text-right">{p.priceSale} {CURRENCY_LABELS[p.currencySale]}</TableCell>
                 <TableCell className="font-mono text-xs">{p.barcode}</TableCell>
                 <TableCell>
                   <Button
@@ -494,26 +528,65 @@ export default function ProductsPage() {
               <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                 Цены
               </h3>
+              <p className="text-xs text-muted-foreground">
+                {"Курс ЦБ: 1 USD = " + rates.usd.toFixed(2) + " \u20BD, 1 CNY = " + rates.cny.toFixed(2) + " \u20BD"}
+              </p>
               <div className="grid grid-cols-2 gap-4">
+                {/* Supplier price */}
                 <div className="space-y-2">
-                  <Label>Цена поставщика ($)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={form.priceSupplier}
-                    onChange={(e) => setForm({ ...form, priceSupplier: e.target.value })}
-                    placeholder="12.50"
-                  />
+                  <Label>Цена поставщика</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={form.priceSupplier}
+                      onChange={(e) => setForm({ ...form, priceSupplier: e.target.value })}
+                      placeholder="90"
+                      className="flex-1"
+                    />
+                    <select
+                      value={form.currencySupplier}
+                      onChange={(e) => setForm({ ...form, currencySupplier: e.target.value as Currency })}
+                      className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    >
+                      <option value="CNY">CNY</option>
+                      <option value="USD">USD</option>
+                      <option value="RUB">RUB</option>
+                    </select>
+                  </div>
+                  {form.currencySupplier !== "RUB" && form.priceSupplier && (
+                    <p className="text-xs text-muted-foreground">
+                      {"= " + convertToRub(form.priceSupplier, form.currencySupplier, rates)}
+                    </p>
+                  )}
                 </div>
+                {/* Sale price */}
                 <div className="space-y-2">
-                  <Label>Цена продажи ($)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={form.priceSale}
-                    onChange={(e) => setForm({ ...form, priceSale: e.target.value })}
-                    placeholder="24.00"
-                  />
+                  <Label>Цена продажи</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={form.priceSale}
+                      onChange={(e) => setForm({ ...form, priceSale: e.target.value })}
+                      placeholder="24.00"
+                      className="flex-1"
+                    />
+                    <select
+                      value={form.currencySale}
+                      onChange={(e) => setForm({ ...form, currencySale: e.target.value as Currency })}
+                      className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    >
+                      <option value="CNY">CNY</option>
+                      <option value="USD">USD</option>
+                      <option value="RUB">RUB</option>
+                    </select>
+                  </div>
+                  {form.currencySale !== "RUB" && form.priceSale && (
+                    <p className="text-xs text-muted-foreground">
+                      {"= " + convertToRub(form.priceSale, form.currencySale, rates)}
+                    </p>
+                  )}
                 </div>
               </div>
             </section>
@@ -521,40 +594,40 @@ export default function ProductsPage() {
             {/* 9-10. Unit dimensions & weight */}
             <section className="space-y-4">
               <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                Габариты 1 шт. (мм) и вес (кг)
+                {"Габариты 1 шт. (см) и вес (кг)"}
               </h3>
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label>Длина</Label>
+                  <Label>{"Длина, см"}</Label>
                   <Input
                     type="number"
                     value={form.dimUnit.length}
                     onChange={(e) =>
                       setForm({ ...form, dimUnit: { ...form.dimUnit, length: e.target.value } })
                     }
-                    placeholder="600"
+                    placeholder="60"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Ширина</Label>
+                  <Label>{"Ширина, см"}</Label>
                   <Input
                     type="number"
                     value={form.dimUnit.width}
                     onChange={(e) =>
                       setForm({ ...form, dimUnit: { ...form.dimUnit, width: e.target.value } })
                     }
-                    placeholder="600"
+                    placeholder="60"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Высота</Label>
+                  <Label>{"Высота, см"}</Label>
                   <Input
                     type="number"
                     value={form.dimUnit.height}
                     onChange={(e) =>
                       setForm({ ...form, dimUnit: { ...form.dimUnit, height: e.target.value } })
                     }
-                    placeholder="12"
+                    placeholder="1.2"
                   />
                 </div>
               </div>
@@ -589,40 +662,40 @@ export default function ProductsPage() {
             {/* 11-14. Package dimensions & weight */}
             <section className="space-y-4">
               <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                Транспортная упаковка (мм) и вес (кг)
+                {"Транспортная упаковка (см) и вес (кг)"}
               </h3>
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label>Длина</Label>
+                  <Label>{"Длина, см"}</Label>
                   <Input
                     type="number"
                     value={form.dimPackage.length}
                     onChange={(e) =>
                       setForm({ ...form, dimPackage: { ...form.dimPackage, length: e.target.value } })
                     }
-                    placeholder="650"
+                    placeholder="65"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Ширина</Label>
+                  <Label>{"Ширина, см"}</Label>
                   <Input
                     type="number"
                     value={form.dimPackage.width}
                     onChange={(e) =>
                       setForm({ ...form, dimPackage: { ...form.dimPackage, width: e.target.value } })
                     }
-                    placeholder="650"
+                    placeholder="65"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Высота</Label>
+                  <Label>{"Высота, см"}</Label>
                   <Input
                     type="number"
                     value={form.dimPackage.height}
                     onChange={(e) =>
                       setForm({ ...form, dimPackage: { ...form.dimPackage, height: e.target.value } })
                     }
-                    placeholder="280"
+                    placeholder="28"
                   />
                 </div>
               </div>

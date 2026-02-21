@@ -20,7 +20,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { Plus, Pencil, Upload, X, FileText, ImageIcon } from "lucide-react"
+import { Plus, Pencil, Upload, X, FileText, ImageIcon, ArrowUpDown, ArrowUp, ArrowDown, Search } from "lucide-react"
 
 /* ========== types ========== */
 interface ProductDimensions {
@@ -234,6 +234,84 @@ export default function ProductsPage() {
   const photoInputRef = useRef<HTMLInputElement>(null)
   const docInputRef = useRef<HTMLInputElement>(null)
 
+  /* search & filters */
+  const [search, setSearch] = useState("")
+  const [filterOwner, setFilterOwner] = useState("")
+  const [filterManufacturer, setFilterManufacturer] = useState("")
+  const [filterTnved, setFilterTnved] = useState("")
+
+  /* sorting */
+  type SortKey = "id" | "article" | "nameRu" | "tnved" | "owner" | "priceSupplier" | "priceSale" | "barcode"
+  type SortDir = "asc" | "desc" | null
+  const [sortKey, setSortKey] = useState<SortKey | null>(null)
+  const [sortDir, setSortDir] = useState<SortDir>(null)
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      if (sortDir === "asc") setSortDir("desc")
+      else if (sortDir === "desc") { setSortKey(null); setSortDir(null) }
+      else setSortDir("asc")
+    } else {
+      setSortKey(key)
+      setSortDir("asc")
+    }
+  }
+
+  function SortIcon({ col }: { col: SortKey }) {
+    if (sortKey !== col) return <ArrowUpDown className="ml-1 inline h-3 w-3 text-muted-foreground/50" />
+    if (sortDir === "asc") return <ArrowUp className="ml-1 inline h-3 w-3" />
+    return <ArrowDown className="ml-1 inline h-3 w-3" />
+  }
+
+  /* hover image tooltip */
+  const [hoverProduct, setHoverProduct] = useState<{ id: number; x: number; y: number } | null>(null)
+
+  /* unique values for filter dropdowns */
+  const uniqueOwners = useMemo(() => [...new Set(products.map((p) => p.owner))].filter(Boolean), [products])
+  const uniqueManufacturers = useMemo(() => [...new Set(products.map((p) => p.manufacturer))].filter(Boolean), [products])
+
+  /* filtered & sorted */
+  const displayProducts = useMemo(() => {
+    let result = [...products]
+
+    // text search across article, name, tnved
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      result = result.filter(
+        (p) =>
+          p.article.toLowerCase().includes(q) ||
+          p.nameRu.toLowerCase().includes(q) ||
+          p.nameEn.toLowerCase().includes(q) ||
+          p.nameZh.toLowerCase().includes(q) ||
+          p.tnved.toLowerCase().includes(q) ||
+          p.barcode.toLowerCase().includes(q)
+      )
+    }
+
+    if (filterOwner) result = result.filter((p) => p.owner === filterOwner)
+    if (filterManufacturer) result = result.filter((p) => p.manufacturer === filterManufacturer)
+    if (filterTnved.trim()) {
+      const q = filterTnved.toLowerCase()
+      result = result.filter((p) => p.tnved.toLowerCase().includes(q))
+    }
+
+    // sorting
+    if (sortKey && sortDir) {
+      result.sort((a, b) => {
+        let va: string | number = ""
+        let vb: string | number = ""
+        if (sortKey === "id") { va = a.id; vb = b.id }
+        else if (sortKey === "priceSupplier") { va = parseFloat(a.priceSupplier) || 0; vb = parseFloat(b.priceSupplier) || 0 }
+        else if (sortKey === "priceSale") { va = parseFloat(a.priceSale) || 0; vb = parseFloat(b.priceSale) || 0 }
+        else { va = a[sortKey]; vb = b[sortKey] }
+        if (typeof va === "number" && typeof vb === "number") return sortDir === "asc" ? va - vb : vb - va
+        return sortDir === "asc" ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va))
+      })
+    }
+
+    return result
+  }, [products, search, filterOwner, filterManufacturer, filterTnved, sortKey, sortDir])
+
   /* CBR exchange rates */
   const [rates, setRates] = useState({ usd: 88.50, cny: 12.20 })
 
@@ -349,7 +427,7 @@ export default function ProductsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-2xl font-bold text-foreground">Товары</h1>
-          <p className="text-sm text-muted-foreground">Каталог товаров клиентов</p>
+          <p className="text-sm text-muted-foreground">{"Каталог товаров клиентов \u00B7 " + displayProducts.length + " из " + products.length}</p>
         </div>
         <Button onClick={openNew} className="gap-2">
           <Plus className="h-4 w-4" />
@@ -357,54 +435,153 @@ export default function ProductsPage() {
         </Button>
       </div>
 
+      {/* filters */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="relative sm:col-span-2 lg:col-span-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Поиск по артикулу, названию, ТНВЭД, ШК..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <select
+          value={filterOwner}
+          onChange={(e) => setFilterOwner(e.target.value)}
+          className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+        >
+          <option value="">Все владельцы</option>
+          {uniqueOwners.map((o) => (
+            <option key={o} value={o}>{o}</option>
+          ))}
+        </select>
+        <select
+          value={filterManufacturer}
+          onChange={(e) => setFilterManufacturer(e.target.value)}
+          className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+        >
+          <option value="">Все производители</option>
+          {uniqueManufacturers.map((m) => (
+            <option key={m} value={m}>{m}</option>
+          ))}
+        </select>
+        <Input
+          placeholder="Фильтр по ТНВЭД"
+          value={filterTnved}
+          onChange={(e) => setFilterTnved(e.target.value)}
+        />
+        {(search || filterOwner || filterManufacturer || filterTnved) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1"
+            onClick={() => { setSearch(""); setFilterOwner(""); setFilterManufacturer(""); setFilterTnved("") }}
+          >
+            <X className="h-3 w-3" />
+            Сбросить
+          </Button>
+        )}
+      </div>
+
       {/* table */}
-      <div className="rounded-xl border border-border bg-card">
+      <div className="relative rounded-xl border border-border bg-card">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-12">ID</TableHead>
-              <TableHead>Артикул</TableHead>
-              <TableHead>Наименование (рус.)</TableHead>
-              <TableHead>ТНВЭД</TableHead>
-              <TableHead>Владелец</TableHead>
-              <TableHead className="text-right">{"Цена пост."}</TableHead>
-              <TableHead className="text-right">{"Цена прод."}</TableHead>
-              <TableHead>ШК</TableHead>
+              <TableHead className="w-12 cursor-pointer select-none" onClick={() => toggleSort("id")}>
+                ID<SortIcon col="id" />
+              </TableHead>
+              <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("article")}>
+                Артикул<SortIcon col="article" />
+              </TableHead>
+              <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("nameRu")}>
+                {"Наименование (рус.)"}<SortIcon col="nameRu" />
+              </TableHead>
+              <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("tnved")}>
+                ТНВЭД<SortIcon col="tnved" />
+              </TableHead>
+              <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("owner")}>
+                Владелец<SortIcon col="owner" />
+              </TableHead>
+              <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("priceSupplier")}>
+                {"Цена пост."}<SortIcon col="priceSupplier" />
+              </TableHead>
+              <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("priceSale")}>
+                {"Цена прод."}<SortIcon col="priceSale" />
+              </TableHead>
+              <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("barcode")}>
+                ШК<SortIcon col="barcode" />
+              </TableHead>
               <TableHead className="w-12" />
             </TableRow>
           </TableHeader>
           <TableBody>
-            {products.map((p) => (
-              <TableRow
-                key={p.id}
-                className="cursor-pointer hover:bg-accent/50"
-                onClick={() => openEdit(p)}
-              >
-                <TableCell className="font-medium text-muted-foreground">{p.id}</TableCell>
-                <TableCell className="font-mono text-sm">{p.article}</TableCell>
-                <TableCell className="font-medium">{p.nameRu}</TableCell>
-                <TableCell className="font-mono text-sm">{p.tnved}</TableCell>
-                <TableCell>{p.owner}</TableCell>
-                <TableCell className="text-right">{p.priceSupplier} {CURRENCY_LABELS[p.currencySupplier]}</TableCell>
-                <TableCell className="text-right">{p.priceSale} {CURRENCY_LABELS[p.currencySale]}</TableCell>
-                <TableCell className="font-mono text-xs">{p.barcode}</TableCell>
-                <TableCell>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      openEdit(p)
-                    }}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
+            {displayProducts.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={9} className="py-12 text-center text-muted-foreground">
+                  Ничего не найдено
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              displayProducts.map((p) => (
+                <TableRow
+                  key={p.id}
+                  className="cursor-pointer hover:bg-accent/50"
+                  onClick={() => openEdit(p)}
+                  onMouseEnter={(e) => {
+                    if (p.photos.length > 0) {
+                      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                      setHoverProduct({ id: p.id, x: rect.right + 8, y: rect.top })
+                    }
+                  }}
+                  onMouseLeave={() => setHoverProduct(null)}
+                >
+                  <TableCell className="font-medium text-muted-foreground">{p.id}</TableCell>
+                  <TableCell className="font-mono text-sm">{p.article}</TableCell>
+                  <TableCell className="font-medium">{p.nameRu}</TableCell>
+                  <TableCell className="font-mono text-sm">{p.tnved}</TableCell>
+                  <TableCell>{p.owner}</TableCell>
+                  <TableCell className="text-right">{p.priceSupplier} {CURRENCY_LABELS[p.currencySupplier]}</TableCell>
+                  <TableCell className="text-right">{p.priceSale} {CURRENCY_LABELS[p.currencySale]}</TableCell>
+                  <TableCell className="font-mono text-xs">{p.barcode}</TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openEdit(p)
+                      }}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
+
+        {/* image tooltip on hover */}
+        {hoverProduct && (() => {
+          const p = products.find((pr) => pr.id === hoverProduct.id)
+          if (!p || p.photos.length === 0) return null
+          return (
+            <div
+              className="pointer-events-none fixed z-50 overflow-hidden rounded-lg border border-border bg-card shadow-xl"
+              style={{ left: hoverProduct.x, top: hoverProduct.y, maxWidth: 200, maxHeight: 200 }}
+            >
+              <img
+                src={p.photos[0]}
+                alt={p.nameRu}
+                className="h-full w-full object-cover"
+                crossOrigin="anonymous"
+              />
+            </div>
+          )
+        })()}
       </div>
 
       {/* sheet form */}

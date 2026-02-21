@@ -1,3 +1,6 @@
+"use client"
+
+import { useState } from "react"
 import {
   Table,
   TableBody,
@@ -7,101 +10,271 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Plus, Pencil } from "lucide-react"
 
-const clients = [
+/* ---------- types ---------- */
+interface ClientAddress {
+  index: string
+  region: string
+  city: string
+  street: string
+  house: string
+  office: string
+}
+
+interface Client {
+  id: number
+  createdAt: string
+  type: "ИП" | "ООО"
+  internalName: string
+  inn: string
+  kpp: string
+  ogrn: string
+  companyName: string
+  bik: string
+  bankName: string
+  ks: string
+  rs: string
+  address: ClientAddress
+  email: string
+  phone: string
+  wechat: string
+  telegram: string
+  status: "calc" | "active" | "inactive" | "blacklist"
+  comment: string
+}
+
+const emptyAddress: ClientAddress = {
+  index: "",
+  region: "",
+  city: "",
+  street: "",
+  house: "",
+  office: "",
+}
+
+const emptyClient: Omit<Client, "id" | "createdAt"> = {
+  type: "ООО",
+  internalName: "",
+  inn: "",
+  kpp: "",
+  ogrn: "",
+  companyName: "",
+  bik: "",
+  bankName: "",
+  ks: "",
+  rs: "",
+  address: { ...emptyAddress },
+  email: "",
+  phone: "",
+  wechat: "",
+  telegram: "",
+  status: "calc",
+  comment: "",
+}
+
+const statusMap: Record<
+  string,
+  { label: string; variant: "default" | "secondary" | "outline" | "destructive" }
+> = {
+  calc: { label: "Расчет", variant: "secondary" },
+  active: { label: "Активный", variant: "default" },
+  inactive: { label: "Неактивный", variant: "outline" },
+  blacklist: { label: "Черный список", variant: "destructive" },
+}
+
+/* ---------- seed data ---------- */
+const seedClients: Client[] = [
   {
     id: 1,
-    name: "Иванов Сергей Петрович",
-    company: 'ООО "Техно-Импорт"',
+    createdAt: "2026-01-15",
+    type: "ООО",
+    internalName: "Техно основной",
+    inn: "7707123456",
+    kpp: "770701001",
+    ogrn: "1027700132195",
+    companyName: 'ООО "Техно-Импорт"',
+    bik: "044525225",
+    bankName: "ПАО Сбербанк",
+    ks: "30101810400000000225",
+    rs: "40702810938000012345",
+    address: { index: "101000", region: "Москва", city: "Москва", street: "Мясницкая", house: "11", office: "305" },
     email: "ivanov@techno-import.ru",
     phone: "+7 (999) 123-45-67",
-    deals: 5,
+    wechat: "techno_ivan",
+    telegram: "@ivanov_tech",
     status: "active",
+    comment: "Постоянный клиент, работаем с 2024 года",
   },
   {
     id: 2,
-    name: "Козлова Анна Михайловна",
-    company: "ИП Козлова А.М.",
+    createdAt: "2026-02-03",
+    type: "ИП",
+    internalName: "Козлова Анна",
+    inn: "771234567890",
+    kpp: "",
+    ogrn: "321774600012345",
+    companyName: "ИП Козлова А.М.",
+    bik: "044525974",
+    bankName: "АО Тинькофф Банк",
+    ks: "30101810145250000974",
+    rs: "40802810100000054321",
+    address: { index: "125009", region: "Москва", city: "Москва", street: "Тверская", house: "22", office: "" },
     email: "kozlova@mail.ru",
     phone: "+7 (916) 555-12-34",
-    deals: 2,
+    wechat: "",
+    telegram: "@kozlova_am",
     status: "active",
+    comment: "",
   },
   {
     id: 3,
-    name: "Петров Дмитрий Олегович",
-    company: 'ООО "ГлобалТрейд"',
+    createdAt: "2026-02-10",
+    type: "ООО",
+    internalName: "Глобал новый",
+    inn: "7709876543",
+    kpp: "770901001",
+    ogrn: "1027700987654",
+    companyName: 'ООО "ГлобалТрейд"',
+    bik: "044525225",
+    bankName: "ПАО Сбербанк",
+    ks: "30101810400000000225",
+    rs: "40702810938000067890",
+    address: { index: "109012", region: "Москва", city: "Москва", street: "Красная площадь", house: "1", office: "1" },
     email: "petrov@globaltrade.ru",
     phone: "+7 (903) 777-88-99",
-    deals: 8,
-    status: "active",
-  },
-  {
-    id: 4,
-    name: "Смирнова Елена Владимировна",
-    company: 'ООО "СмартЛогистик"',
-    email: "smirnova@smartlog.ru",
-    phone: "+7 (926) 333-44-55",
-    deals: 1,
-    status: "new",
-  },
-  {
-    id: 5,
-    name: "Федоров Алексей Николаевич",
-    company: "ИП Федоров А.Н.",
-    email: "fedorov@yandex.ru",
-    phone: "+7 (985) 666-77-88",
-    deals: 0,
-    status: "inactive",
+    wechat: "global_petrov",
+    telegram: "@petrov_global",
+    status: "calc",
+    comment: "Первая заявка, ждёт расчет",
   },
 ]
 
-const statusMap: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
-  active: { label: "Активный", variant: "default" },
-  new: { label: "Новый", variant: "secondary" },
-  inactive: { label: "Неактивный", variant: "outline" },
-}
-
+/* ---------- component ---------- */
 export default function ClientsPage() {
+  const [clients, setClients] = useState<Client[]>(seedClients)
+  const [open, setOpen] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [form, setForm] = useState<Omit<Client, "id" | "createdAt">>({ ...emptyClient, address: { ...emptyAddress } })
+
+  function openNew() {
+    setEditingId(null)
+    setForm({ ...emptyClient, address: { ...emptyAddress } })
+    setOpen(true)
+  }
+
+  function openEdit(client: Client) {
+    setEditingId(client.id)
+    const { id: _id, createdAt: _ca, ...rest } = client
+    setForm({ ...rest, address: { ...client.address } })
+    setOpen(true)
+  }
+
+  function handleSave() {
+    if (editingId !== null) {
+      setClients((prev) =>
+        prev.map((c) =>
+          c.id === editingId ? { ...c, ...form, address: { ...form.address } } : c
+        )
+      )
+    } else {
+      const newId = clients.length > 0 ? Math.max(...clients.map((c) => c.id)) + 1 : 1
+      setClients((prev) => [
+        ...prev,
+        {
+          id: newId,
+          createdAt: new Date().toISOString().slice(0, 10),
+          ...form,
+          address: { ...form.address },
+        },
+      ])
+    }
+    setOpen(false)
+  }
+
+  function updateField<K extends keyof Omit<Client, "id" | "createdAt">>(
+    key: K,
+    value: Omit<Client, "id" | "createdAt">[K]
+  ) {
+    setForm((prev) => ({ ...prev, [key]: value }))
+  }
+
+  function updateAddress<K extends keyof ClientAddress>(key: K, value: string) {
+    setForm((prev) => ({ ...prev, address: { ...prev.address, [key]: value } }))
+  }
+
   return (
     <div className="space-y-6">
+      {/* header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-2xl font-bold text-foreground">Клиенты</h1>
-          <p className="text-sm text-muted-foreground">
-            Управление базой клиентов
-          </p>
+          <p className="text-sm text-muted-foreground">Управление базой клиентов</p>
         </div>
+        <Button onClick={openNew} className="gap-2">
+          <Plus className="h-4 w-4" />
+          Добавить клиента
+        </Button>
       </div>
 
+      {/* table */}
       <div className="rounded-xl border border-border bg-card">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead className="w-12">ID</TableHead>
-              <TableHead>ФИО</TableHead>
+              <TableHead>Дата</TableHead>
+              <TableHead>Тип</TableHead>
+              <TableHead>Название (внутр.)</TableHead>
               <TableHead>Компания</TableHead>
+              <TableHead>ИНН</TableHead>
               <TableHead>E-mail</TableHead>
               <TableHead>Телефон</TableHead>
-              <TableHead className="text-center">Сделки</TableHead>
               <TableHead>Статус</TableHead>
+              <TableHead className="w-12" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {clients.map((client) => {
-              const status = statusMap[client.status]
+              const st = statusMap[client.status]
               return (
-                <TableRow key={client.id}>
-                  <TableCell className="font-medium text-muted-foreground">
-                    {client.id}
-                  </TableCell>
-                  <TableCell className="font-medium">{client.name}</TableCell>
-                  <TableCell>{client.company}</TableCell>
+                <TableRow
+                  key={client.id}
+                  className="cursor-pointer hover:bg-accent/50"
+                  onClick={() => openEdit(client)}
+                >
+                  <TableCell className="font-medium text-muted-foreground">{client.id}</TableCell>
+                  <TableCell className="text-muted-foreground">{client.createdAt}</TableCell>
+                  <TableCell>{client.type}</TableCell>
+                  <TableCell className="font-medium">{client.internalName}</TableCell>
+                  <TableCell>{client.companyName}</TableCell>
+                  <TableCell className="font-mono text-xs">{client.inn}</TableCell>
                   <TableCell>{client.email}</TableCell>
                   <TableCell>{client.phone}</TableCell>
-                  <TableCell className="text-center">{client.deals}</TableCell>
                   <TableCell>
-                    <Badge variant={status.variant}>{status.label}</Badge>
+                    <Badge variant={st.variant}>{st.label}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); openEdit(client) }}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
                   </TableCell>
                 </TableRow>
               )
@@ -109,6 +282,175 @@ export default function ClientsPage() {
           </TableBody>
         </Table>
       </div>
+
+      {/* sheet form */}
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
+          <SheetHeader>
+            <SheetTitle className="font-display">
+              {editingId !== null ? `Редактирование клиента #${editingId}` : "Новый клиент"}
+            </SheetTitle>
+          </SheetHeader>
+
+          <div className="mt-6 space-y-8">
+            {/* --- main --- */}
+            <section className="space-y-4">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Основное</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Тип</Label>
+                  <Select value={form.type} onValueChange={(v) => updateField("type", v as "ИП" | "ООО")}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ИП">ИП</SelectItem>
+                      <SelectItem value="ООО">ООО</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Статус</Label>
+                  <Select value={form.status} onValueChange={(v) => updateField("status", v as Client["status"])}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="calc">Расчет</SelectItem>
+                      <SelectItem value="active">Активный</SelectItem>
+                      <SelectItem value="inactive">Неактивный</SelectItem>
+                      <SelectItem value="blacklist">Черный список</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Название для нас (внутреннее)</Label>
+                <Input value={form.internalName} onChange={(e) => updateField("internalName", e.target.value)} placeholder="Любое название, видно только админам" />
+              </div>
+            </section>
+
+            {/* --- requisites --- */}
+            <section className="space-y-4">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Реквизиты</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>ИНН</Label>
+                  <Input value={form.inn} onChange={(e) => updateField("inn", e.target.value)} placeholder="7707123456" />
+                </div>
+                {form.type === "ООО" && (
+                  <div className="space-y-2">
+                    <Label>КПП</Label>
+                    <Input value={form.kpp} onChange={(e) => updateField("kpp", e.target.value)} placeholder="770701001" />
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Label>ОГРН</Label>
+                  <Input value={form.ogrn} onChange={(e) => updateField("ogrn", e.target.value)} placeholder="1027700132195" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Название компании</Label>
+                  <Input value={form.companyName} onChange={(e) => updateField("companyName", e.target.value)} placeholder='ООО "Компания"' />
+                </div>
+              </div>
+            </section>
+
+            {/* --- bank --- */}
+            <section className="space-y-4">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Банковские реквизиты</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>БИК</Label>
+                  <Input value={form.bik} onChange={(e) => updateField("bik", e.target.value)} placeholder="044525225" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Название банка</Label>
+                  <Input value={form.bankName} onChange={(e) => updateField("bankName", e.target.value)} placeholder="ПАО Сбербанк" />
+                </div>
+                <div className="space-y-2">
+                  <Label>К/С</Label>
+                  <Input value={form.ks} onChange={(e) => updateField("ks", e.target.value)} placeholder="30101810400000000225" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Р/С</Label>
+                  <Input value={form.rs} onChange={(e) => updateField("rs", e.target.value)} placeholder="40702810938000012345" />
+                </div>
+              </div>
+            </section>
+
+            {/* --- address --- */}
+            <section className="space-y-4">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Адрес</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Индекс</Label>
+                  <Input value={form.address.index} onChange={(e) => updateAddress("index", e.target.value)} placeholder="101000" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Область</Label>
+                  <Input value={form.address.region} onChange={(e) => updateAddress("region", e.target.value)} placeholder="Московская обл." />
+                </div>
+                <div className="space-y-2">
+                  <Label>Город</Label>
+                  <Input value={form.address.city} onChange={(e) => updateAddress("city", e.target.value)} placeholder="Москва" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Улица</Label>
+                  <Input value={form.address.street} onChange={(e) => updateAddress("street", e.target.value)} placeholder="Мясницкая" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Дом</Label>
+                  <Input value={form.address.house} onChange={(e) => updateAddress("house", e.target.value)} placeholder="11" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Квартира / Офис</Label>
+                  <Input value={form.address.office} onChange={(e) => updateAddress("office", e.target.value)} placeholder="305" />
+                </div>
+              </div>
+            </section>
+
+            {/* --- contacts --- */}
+            <section className="space-y-4">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Контакты</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>E-mail</Label>
+                  <Input type="email" value={form.email} onChange={(e) => updateField("email", e.target.value)} placeholder="client@company.ru" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Телефон</Label>
+                  <Input value={form.phone} onChange={(e) => updateField("phone", e.target.value)} placeholder="+7 (999) 123-45-67" />
+                </div>
+                <div className="space-y-2">
+                  <Label>WeChat</Label>
+                  <Input value={form.wechat} onChange={(e) => updateField("wechat", e.target.value)} placeholder="wechat_id" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Telegram</Label>
+                  <Input value={form.telegram} onChange={(e) => updateField("telegram", e.target.value)} placeholder="@username" />
+                </div>
+              </div>
+            </section>
+
+            {/* --- comment --- */}
+            <section className="space-y-4">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Внутренний комментарий</h3>
+              <Textarea
+                value={form.comment}
+                onChange={(e) => updateField("comment", e.target.value)}
+                placeholder="Информация о клиенте для внутреннего использования..."
+                className="min-h-24"
+              />
+            </section>
+
+            {/* --- actions --- */}
+            <div className="flex gap-3 border-t border-border pt-6">
+              <Button onClick={handleSave} className="flex-1">
+                {editingId !== null ? "Сохранить" : "Добавить клиента"}
+              </Button>
+              <Button variant="outline" onClick={() => setOpen(false)} className="flex-1">
+                Отмена
+              </Button>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

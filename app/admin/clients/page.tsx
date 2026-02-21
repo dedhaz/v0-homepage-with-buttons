@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import {
   Table,
   TableBody,
@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Plus, Pencil } from "lucide-react"
+import { Plus, Pencil, ArrowUpDown, ArrowUp, ArrowDown, Search, X } from "lucide-react"
 
 /* ---------- types ---------- */
 interface ClientAddress {
@@ -44,6 +44,7 @@ interface Client {
   createdAt: string
   type: "ИП" | "ООО"
   internalName: string
+  contractNumber: string
   inn: string
   kpp: string
   ogrn: string
@@ -73,6 +74,7 @@ const emptyAddress: ClientAddress = {
 const emptyClient: Omit<Client, "id" | "createdAt"> = {
   type: "ООО",
   internalName: "",
+  contractNumber: "",
   inn: "",
   kpp: "",
   ogrn: "",
@@ -107,6 +109,7 @@ const seedClients: Client[] = [
     createdAt: "2026-01-15",
     type: "ООО",
     internalName: "Техно основной",
+    contractNumber: "ВЭД-2026/001",
     inn: "7707123456",
     kpp: "770701001",
     ogrn: "1027700132195",
@@ -128,6 +131,7 @@ const seedClients: Client[] = [
     createdAt: "2026-02-03",
     type: "ИП",
     internalName: "Козлова Анна",
+    contractNumber: "ВЭД-2026/002",
     inn: "771234567890",
     kpp: "",
     ogrn: "321774600012345",
@@ -149,6 +153,7 @@ const seedClients: Client[] = [
     createdAt: "2026-02-10",
     type: "ООО",
     internalName: "Глобал новый",
+    contractNumber: "",
     inn: "7709876543",
     kpp: "770901001",
     ogrn: "1027700987654",
@@ -173,6 +178,66 @@ export default function ClientsPage() {
   const [open, setOpen] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState<Omit<Client, "id" | "createdAt">>({ ...emptyClient, address: { ...emptyAddress } })
+
+  /* search & filters */
+  const [search, setSearch] = useState("")
+  const [filterStatus, setFilterStatus] = useState("")
+
+  /* sorting */
+  type SortKey = "id" | "createdAt" | "companyName" | "contractNumber" | "inn" | "email" | "phone" | "status"
+  type SortDir = "asc" | "desc" | null
+  const [sortKey, setSortKey] = useState<SortKey | null>(null)
+  const [sortDir, setSortDir] = useState<SortDir>(null)
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      if (sortDir === "asc") setSortDir("desc")
+      else if (sortDir === "desc") { setSortKey(null); setSortDir(null) }
+      else setSortDir("asc")
+    } else {
+      setSortKey(key)
+      setSortDir("asc")
+    }
+  }
+
+  function SortIcon({ col }: { col: SortKey }) {
+    if (sortKey !== col) return <ArrowUpDown className="ml-1 inline h-3 w-3 text-muted-foreground/50" />
+    if (sortDir === "asc") return <ArrowUp className="ml-1 inline h-3 w-3" />
+    return <ArrowDown className="ml-1 inline h-3 w-3" />
+  }
+
+  /* filtered & sorted */
+  const displayClients = useMemo(() => {
+    let result = [...clients]
+
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      result = result.filter(
+        (c) =>
+          c.companyName.toLowerCase().includes(q) ||
+          c.inn.toLowerCase().includes(q) ||
+          c.email.toLowerCase().includes(q) ||
+          c.phone.toLowerCase().includes(q) ||
+          c.contractNumber.toLowerCase().includes(q) ||
+          c.internalName.toLowerCase().includes(q)
+      )
+    }
+
+    if (filterStatus) result = result.filter((c) => c.status === filterStatus)
+
+    if (sortKey && sortDir) {
+      result.sort((a, b) => {
+        let va: string | number = ""
+        let vb: string | number = ""
+        if (sortKey === "id") { va = a.id; vb = b.id }
+        else { va = a[sortKey]; vb = b[sortKey] }
+        if (typeof va === "number" && typeof vb === "number") return sortDir === "asc" ? va - vb : vb - va
+        return sortDir === "asc" ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va))
+      })
+    }
+
+    return result
+  }, [clients, search, filterStatus, sortKey, sortDir])
 
   function openNew() {
     setEditingId(null)
@@ -226,7 +291,9 @@ export default function ClientsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-2xl font-bold text-foreground">Клиенты</h1>
-          <p className="text-sm text-muted-foreground">Управление базой клиентов</p>
+          <p className="text-sm text-muted-foreground">
+            {"Управление базой клиентов \u00B7 " + displayClients.length + " из " + clients.length}
+          </p>
         </div>
         <Button onClick={openNew} className="gap-2">
           <Plus className="h-4 w-4" />
@@ -234,51 +301,108 @@ export default function ClientsPage() {
         </Button>
       </div>
 
+      {/* filters */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="relative sm:col-span-2 lg:col-span-2">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Поиск по компании, ИНН, e-mail, телефону, договору..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+          className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+        >
+          <option value="">Все статусы</option>
+          <option value="calc">Расчет</option>
+          <option value="active">Активный</option>
+          <option value="inactive">Неактивный</option>
+          <option value="blacklist">Черный список</option>
+        </select>
+        {(search || filterStatus) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1"
+            onClick={() => { setSearch(""); setFilterStatus("") }}
+          >
+            <X className="h-3 w-3" />
+            Сбросить
+          </Button>
+        )}
+      </div>
+
       {/* table */}
       <div className="rounded-xl border border-border bg-card">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-12">ID</TableHead>
-              <TableHead>Дата</TableHead>
-              <TableHead>Тип</TableHead>
-              <TableHead>Название (внутр.)</TableHead>
-              <TableHead>Компания</TableHead>
-              <TableHead>ИНН</TableHead>
-              <TableHead>E-mail</TableHead>
-              <TableHead>Телефон</TableHead>
-              <TableHead>Статус</TableHead>
+              <TableHead className="w-12 cursor-pointer select-none" onClick={() => toggleSort("id")}>
+                ID<SortIcon col="id" />
+              </TableHead>
+              <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("createdAt")}>
+                Дата<SortIcon col="createdAt" />
+              </TableHead>
+              <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("companyName")}>
+                Компания<SortIcon col="companyName" />
+              </TableHead>
+              <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("contractNumber")}>
+                {"N\u00B0 договора"}<SortIcon col="contractNumber" />
+              </TableHead>
+              <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("inn")}>
+                ИНН<SortIcon col="inn" />
+              </TableHead>
+              <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("email")}>
+                E-mail<SortIcon col="email" />
+              </TableHead>
+              <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("phone")}>
+                Телефон<SortIcon col="phone" />
+              </TableHead>
+              <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("status")}>
+                Статус<SortIcon col="status" />
+              </TableHead>
               <TableHead className="w-12" />
             </TableRow>
           </TableHeader>
           <TableBody>
-            {clients.map((client) => {
-              const st = statusMap[client.status]
-              return (
-                <TableRow
-                  key={client.id}
-                  className="cursor-pointer hover:bg-accent/50"
-                  onClick={() => openEdit(client)}
-                >
-                  <TableCell className="font-medium text-muted-foreground">{client.id}</TableCell>
-                  <TableCell className="text-muted-foreground">{client.createdAt}</TableCell>
-                  <TableCell>{client.type}</TableCell>
-                  <TableCell className="font-medium">{client.internalName}</TableCell>
-                  <TableCell>{client.companyName}</TableCell>
-                  <TableCell className="font-mono text-xs">{client.inn}</TableCell>
-                  <TableCell>{client.email}</TableCell>
-                  <TableCell>{client.phone}</TableCell>
-                  <TableCell>
-                    <Badge variant={st.variant}>{st.label}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); openEdit(client) }}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              )
-            })}
+            {displayClients.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={9} className="py-12 text-center text-muted-foreground">
+                  Ничего не найдено
+                </TableCell>
+              </TableRow>
+            ) : (
+              displayClients.map((client) => {
+                const st = statusMap[client.status]
+                return (
+                  <TableRow
+                    key={client.id}
+                    className="cursor-pointer hover:bg-accent/50"
+                    onClick={() => openEdit(client)}
+                  >
+                    <TableCell className="font-medium text-muted-foreground">{client.id}</TableCell>
+                    <TableCell className="text-muted-foreground">{client.createdAt}</TableCell>
+                    <TableCell className="font-medium">{client.companyName}</TableCell>
+                    <TableCell className="font-mono text-sm">{client.contractNumber || "\u2014"}</TableCell>
+                    <TableCell className="font-mono text-xs">{client.inn}</TableCell>
+                    <TableCell>{client.email}</TableCell>
+                    <TableCell>{client.phone}</TableCell>
+                    <TableCell>
+                      <Badge variant={st.variant}>{st.label}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); openEdit(client) }}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                )
+              })
+            )}
           </TableBody>
         </Table>
       </div>
@@ -324,6 +448,10 @@ export default function ClientsPage() {
                 <Label>Название для нас (внутреннее)</Label>
                 <Input value={form.internalName} onChange={(e) => updateField("internalName", e.target.value)} placeholder="Любое название, видно только админам" />
               </div>
+              <div className="space-y-2">
+                <Label>{"N\u00B0 договора"}</Label>
+                <Input value={form.contractNumber} onChange={(e) => updateField("contractNumber", e.target.value)} placeholder="ВЭД-2026/001" />
+              </div>
             </section>
 
             {/* --- requisites --- */}
@@ -364,11 +492,11 @@ export default function ClientsPage() {
                   <Input value={form.bankName} onChange={(e) => updateField("bankName", e.target.value)} placeholder="ПАО Сбербанк" />
                 </div>
                 <div className="space-y-2">
-                  <Label>К/С</Label>
+                  <Label>{"К/С"}</Label>
                   <Input value={form.ks} onChange={(e) => updateField("ks", e.target.value)} placeholder="30101810400000000225" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Р/С</Label>
+                  <Label>{"Р/С"}</Label>
                   <Input value={form.rs} onChange={(e) => updateField("rs", e.target.value)} placeholder="40702810938000012345" />
                 </div>
               </div>
@@ -399,7 +527,7 @@ export default function ClientsPage() {
                   <Input value={form.address.house} onChange={(e) => updateAddress("house", e.target.value)} placeholder="11" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Квартира / Офис</Label>
+                  <Label>{"Квартира / Офис"}</Label>
                   <Input value={form.address.office} onChange={(e) => updateAddress("office", e.target.value)} placeholder="305" />
                 </div>
               </div>

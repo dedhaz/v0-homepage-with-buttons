@@ -27,9 +27,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Plus, Pencil, ArrowUpDown, ArrowUp, ArrowDown, Search, X } from "lucide-react"
+import { Plus, Pencil, ArrowUpDown, ArrowUp, ArrowDown, Search, X, Trash2 } from "lucide-react"
 
 /* ---------- types ---------- */
+type ContractType = "supply" | "commission" | "transport"
+
+interface Contract {
+  number: string
+  type: ContractType
+  date: string
+}
+
+const contractTypeLabels: Record<ContractType, string> = {
+  supply: "Поставки",
+  commission: "Комиссии",
+  transport: "Перевозки",
+}
+
+const emptyContract: Contract = { number: "", type: "supply", date: "" }
+
 interface ClientAddress {
   index: string
   region: string
@@ -44,7 +60,7 @@ interface Client {
   createdAt: string
   type: "ИП" | "ООО"
   internalName: string
-  contractNumber: string
+  contracts: Contract[]
   inn: string
   kpp: string
   ogrn: string
@@ -74,7 +90,7 @@ const emptyAddress: ClientAddress = {
 const emptyClient: Omit<Client, "id" | "createdAt"> = {
   type: "ООО",
   internalName: "",
-  contractNumber: "",
+  contracts: [],
   inn: "",
   kpp: "",
   ogrn: "",
@@ -109,7 +125,10 @@ const seedClients: Client[] = [
     createdAt: "2026-01-15",
     type: "ООО",
     internalName: "Техно основной",
-    contractNumber: "ВЭД-2026/001",
+    contracts: [
+      { number: "ВЭД-2026/001", type: "supply", date: "2026-01-15" },
+      { number: "ВЭД-2026/001-К", type: "commission", date: "2026-01-20" },
+    ],
     inn: "7707123456",
     kpp: "770701001",
     ogrn: "1027700132195",
@@ -131,7 +150,9 @@ const seedClients: Client[] = [
     createdAt: "2026-02-03",
     type: "ИП",
     internalName: "Козлова Анна",
-    contractNumber: "ВЭД-2026/002",
+    contracts: [
+      { number: "ВЭД-2026/002", type: "transport", date: "2026-02-03" },
+    ],
     inn: "771234567890",
     kpp: "",
     ogrn: "321774600012345",
@@ -153,7 +174,7 @@ const seedClients: Client[] = [
     createdAt: "2026-02-10",
     type: "ООО",
     internalName: "Глобал новый",
-    contractNumber: "",
+    contracts: [],
     inn: "7709876543",
     kpp: "770901001",
     ogrn: "1027700987654",
@@ -184,7 +205,7 @@ export default function ClientsPage() {
   const [filterStatus, setFilterStatus] = useState("")
 
   /* sorting */
-  type SortKey = "id" | "createdAt" | "companyName" | "contractNumber" | "inn" | "email" | "phone" | "status"
+  type SortKey = "id" | "createdAt" | "companyName" | "contracts" | "inn" | "email" | "phone" | "status"
   type SortDir = "asc" | "desc" | null
   const [sortKey, setSortKey] = useState<SortKey | null>(null)
   const [sortDir, setSortDir] = useState<SortDir>(null)
@@ -218,7 +239,7 @@ export default function ClientsPage() {
           c.inn.toLowerCase().includes(q) ||
           c.email.toLowerCase().includes(q) ||
           c.phone.toLowerCase().includes(q) ||
-          c.contractNumber.toLowerCase().includes(q) ||
+          c.contracts.some((ct) => ct.number.toLowerCase().includes(q)) ||
           c.internalName.toLowerCase().includes(q)
       )
     }
@@ -230,6 +251,7 @@ export default function ClientsPage() {
         let va: string | number = ""
         let vb: string | number = ""
         if (sortKey === "id") { va = a.id; vb = b.id }
+        else if (sortKey === "contracts") { va = a.contracts[0]?.number ?? ""; vb = b.contracts[0]?.number ?? "" }
         else { va = a[sortKey]; vb = b[sortKey] }
         if (typeof va === "number" && typeof vb === "number") return sortDir === "asc" ? va - vb : vb - va
         return sortDir === "asc" ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va))
@@ -241,14 +263,14 @@ export default function ClientsPage() {
 
   function openNew() {
     setEditingId(null)
-    setForm({ ...emptyClient, address: { ...emptyAddress } })
+    setForm({ ...emptyClient, contracts: [], address: { ...emptyAddress } })
     setOpen(true)
   }
 
   function openEdit(client: Client) {
     setEditingId(client.id)
     const { id: _id, createdAt: _ca, ...rest } = client
-    setForm({ ...rest, address: { ...client.address } })
+    setForm({ ...rest, contracts: client.contracts.map((c) => ({ ...c })), address: { ...client.address } })
     setOpen(true)
   }
 
@@ -256,7 +278,7 @@ export default function ClientsPage() {
     if (editingId !== null) {
       setClients((prev) =>
         prev.map((c) =>
-          c.id === editingId ? { ...c, ...form, address: { ...form.address } } : c
+          c.id === editingId ? { ...c, ...form, contracts: form.contracts.map((ct) => ({ ...ct })), address: { ...form.address } } : c
         )
       )
     } else {
@@ -267,6 +289,7 @@ export default function ClientsPage() {
           id: newId,
           createdAt: new Date().toISOString().slice(0, 10),
           ...form,
+          contracts: form.contracts.map((ct) => ({ ...ct })),
           address: { ...form.address },
         },
       ])
@@ -350,8 +373,8 @@ export default function ClientsPage() {
               <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("companyName")}>
                 Компания<SortIcon col="companyName" />
               </TableHead>
-              <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("contractNumber")}>
-                {"N\u00B0 договора"}<SortIcon col="contractNumber" />
+              <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("contracts")}>
+                {"Договоры"}<SortIcon col="contracts" />
               </TableHead>
               <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("inn")}>
                 ИНН<SortIcon col="inn" />
@@ -387,7 +410,18 @@ export default function ClientsPage() {
                     <TableCell className="font-medium text-muted-foreground">{client.id}</TableCell>
                     <TableCell className="text-muted-foreground">{client.createdAt}</TableCell>
                     <TableCell className="font-medium">{client.companyName}</TableCell>
-                    <TableCell className="font-mono text-sm">{client.contractNumber || "\u2014"}</TableCell>
+                    <TableCell className="text-sm">
+                      {client.contracts.length === 0 ? "\u2014" : (
+                        <div className="flex flex-col gap-0.5">
+                          {client.contracts.map((ct, i) => (
+                            <span key={i} className="flex items-center gap-1.5">
+                              <span className="font-mono">{ct.number}</span>
+                              <Badge variant="outline" className="text-[10px] px-1 py-0">{contractTypeLabels[ct.type]}</Badge>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell className="font-mono text-xs">{client.inn}</TableCell>
                     <TableCell>{client.email}</TableCell>
                     <TableCell>{client.phone}</TableCell>
@@ -448,10 +482,84 @@ export default function ClientsPage() {
                 <Label>Название для нас (внутреннее)</Label>
                 <Input value={form.internalName} onChange={(e) => updateField("internalName", e.target.value)} placeholder="Любое название, видно только админам" />
               </div>
-              <div className="space-y-2">
-                <Label>{"N\u00B0 договора"}</Label>
-                <Input value={form.contractNumber} onChange={(e) => updateField("contractNumber", e.target.value)} placeholder="ВЭД-2026/001" />
+            </section>
+
+            {/* --- contracts --- */}
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Договоры</h3>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1"
+                  onClick={() => setForm((prev) => ({ ...prev, contracts: [...prev.contracts, { ...emptyContract }] }))}
+                >
+                  <Plus className="h-3 w-3" />
+                  Добавить
+                </Button>
               </div>
+              {form.contracts.length === 0 && (
+                <p className="text-sm text-muted-foreground">Договоры не добавлены</p>
+              )}
+              {form.contracts.map((ct, idx) => (
+                <div key={idx} className="rounded-lg border border-border p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-muted-foreground">{"Договор #" + (idx + 1)}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-destructive hover:text-destructive"
+                      onClick={() => setForm((prev) => ({ ...prev, contracts: prev.contracts.filter((_, i) => i !== idx) }))}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">{"N\u00B0 договора"}</Label>
+                      <Input
+                        value={ct.number}
+                        onChange={(e) => {
+                          const next = [...form.contracts]
+                          next[idx] = { ...next[idx], number: e.target.value }
+                          setForm((prev) => ({ ...prev, contracts: next }))
+                        }}
+                        placeholder="ВЭД-2026/001"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Тип</Label>
+                      <select
+                        value={ct.type}
+                        onChange={(e) => {
+                          const next = [...form.contracts]
+                          next[idx] = { ...next[idx], type: e.target.value as ContractType }
+                          setForm((prev) => ({ ...prev, contracts: next }))
+                        }}
+                        className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                      >
+                        <option value="supply">Поставки</option>
+                        <option value="commission">Комиссии</option>
+                        <option value="transport">Перевозки</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Дата</Label>
+                      <Input
+                        type="date"
+                        value={ct.date}
+                        onChange={(e) => {
+                          const next = [...form.contracts]
+                          next[idx] = { ...next[idx], date: e.target.value }
+                          setForm((prev) => ({ ...prev, contracts: next }))
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
             </section>
 
             {/* --- requisites --- */}

@@ -51,6 +51,14 @@ interface Product {
   weightNettoPackage: string
   weightBruttoPackage: string
   qtyInPackage: string
+  dutyPercent: string
+  vatPercent: "0" | "10" | "22"
+  excise: string
+  antiDumping: string
+  permitDocType: "" | "refusal" | "DS" | "SS" | "SGR" | "notification"
+  permitDocNumber: string
+  permitDocDate: string
+  permitDocFile: string
   photos: string[]
   documents: { name: string; url: string }[]
 }
@@ -78,6 +86,14 @@ const emptyProduct: Omit<Product, "id"> = {
   weightNettoPackage: "",
   weightBruttoPackage: "",
   qtyInPackage: "",
+  dutyPercent: "",
+  vatPercent: "22",
+  excise: "",
+  antiDumping: "",
+  permitDocType: "",
+  permitDocNumber: "",
+  permitDocDate: "",
+  permitDocFile: "",
   photos: [],
   documents: [],
 }
@@ -119,6 +135,14 @@ const seedProducts: Product[] = [
     weightNettoPackage: "14.0",
     weightBruttoPackage: "16.5",
     qtyInPackage: "5",
+    dutyPercent: "6",
+    vatPercent: "22",
+    excise: "",
+    antiDumping: "",
+    permitDocType: "DS",
+    permitDocNumber: "РОСС RU.HB68.H00136/22",
+    permitDocDate: "2026-01-10",
+    permitDocFile: "",
     photos: [],
     documents: [],
   },
@@ -144,6 +168,14 @@ const seedProducts: Product[] = [
     weightNettoPackage: "13.0",
     weightBruttoPackage: "14.5",
     qtyInPackage: "1",
+    dutyPercent: "8",
+    vatPercent: "22",
+    excise: "",
+    antiDumping: "",
+    permitDocType: "",
+    permitDocNumber: "",
+    permitDocDate: "",
+    permitDocFile: "",
     photos: [],
     documents: [],
   },
@@ -830,7 +862,7 @@ export default function ProductsPage() {
                   />
                 </div>
                 <div className="rounded-lg border border-border bg-muted/50 p-3">
-                  <p className="text-xs text-muted-foreground">Объем 1 шт.</p>
+                  <p className="text-xs text-muted-foreground">Объ��м 1 шт.</p>
                   <p className="text-sm font-semibold text-foreground">{volumeUnit}</p>
                 </div>
               </div>
@@ -912,6 +944,97 @@ export default function ProductsPage() {
                   <p className="text-xs text-muted-foreground">Объем транспортного места</p>
                   <p className="text-sm font-semibold text-foreground">{volumePackage}</p>
                 </div>
+              </div>
+            </section>
+
+            {/* Customs: duty, VAT, excise, anti-dumping */}
+            <section className="space-y-4">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                Таможенные параметры
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>{"Пошлина, %"}</Label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={form.dutyPercent}
+                    onChange={(e) => setForm({ ...form, dutyPercent: e.target.value })}
+                    placeholder="6"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>{"НДС, %"}</Label>
+                  <select
+                    value={form.vatPercent}
+                    onChange={(e) => setForm({ ...form, vatPercent: e.target.value as "0" | "10" | "22" })}
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                  >
+                    <option value="0">{"0%"}</option>
+                    <option value="10">{"10%"}</option>
+                    <option value="22">{"22%"}</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Акциз</Label>
+                  <Input
+                    value={form.excise}
+                    onChange={(e) => setForm({ ...form, excise: e.target.value })}
+                    placeholder="Не облагается"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Антидемпинговая пошлина</Label>
+                  <Input
+                    value={form.antiDumping}
+                    onChange={(e) => setForm({ ...form, antiDumping: e.target.value })}
+                    placeholder="Не облагается"
+                  />
+                </div>
+              </div>
+            </section>
+
+            {/* Permit document */}
+            <section className="space-y-4">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                Разрешительный документ
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Тип документа</Label>
+                  <select
+                    value={form.permitDocType}
+                    onChange={(e) => setForm({ ...form, permitDocType: e.target.value as Product["permitDocType"] })}
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                  >
+                    <option value="">Не выбран</option>
+                    <option value="refusal">Отказное</option>
+                    <option value="DS">ДС (Декларация соответствия)</option>
+                    <option value="SS">СС (Сертификат соответствия)</option>
+                    <option value="SGR">СГР</option>
+                    <option value="notification">Нотификация</option>
+                  </select>
+                </div>
+                {form.permitDocType && (
+                  <>
+                    <div className="space-y-2">
+                      <Label>{"N\u00B0 документа"}</Label>
+                      <Input
+                        value={form.permitDocNumber}
+                        onChange={(e) => setForm({ ...form, permitDocNumber: e.target.value })}
+                        placeholder="РОСС RU.HB68.H00136/22"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Дата документа</Label>
+                      <Input
+                        type="date"
+                        value={form.permitDocDate}
+                        onChange={(e) => setForm({ ...form, permitDocDate: e.target.value })}
+                      />
+                    </div>
+                  </>
+                )}
               </div>
             </section>
 
@@ -998,7 +1121,7 @@ export default function ProductsPage() {
             {/* actions */}
             <div className="flex gap-3 border-t border-border pt-6">
               <Button onClick={handleSave} className="flex-1">
-                {editingId !== null ? "Сохранить" : "Добавить товар"}
+                {editingId !== null ? "Сохранит��" : "Добавить товар"}
               </Button>
               <Button variant="outline" onClick={() => setOpen(false)} className="flex-1">
                 Отмена

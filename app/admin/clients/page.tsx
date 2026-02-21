@@ -27,7 +27,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Plus, Pencil, ArrowUpDown, ArrowUp, ArrowDown, Search, X, Trash2 } from "lucide-react"
+import Link from "next/link"
+import { Plus, Pencil, ArrowUpDown, ArrowUp, ArrowDown, Search, X, Trash2, FileText } from "lucide-react"
 
 /* ---------- types ---------- */
 type ContractType = "supply" | "commission" | "transport"
@@ -428,11 +429,18 @@ export default function ClientsPage() {
                     <TableCell>
                       <Badge variant={st.variant}>{st.label}</Badge>
                     </TableCell>
-                    <TableCell>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); openEdit(client) }}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
+  <TableCell>
+  <div className="flex items-center gap-1">
+  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); openEdit(client) }}>
+  <Pencil className="h-4 w-4" />
+  </Button>
+  <Button variant="ghost" size="icon" className="h-8 w-8" asChild onClick={(e) => e.stopPropagation()}>
+  <Link href={"/admin/deals/new?client=" + encodeURIComponent(client.companyName)} title="Создать сделку">
+  <FileText className="h-4 w-4" />
+  </Link>
+  </Button>
+  </div>
+  </TableCell>
                   </TableRow>
                 )
               })

@@ -25,6 +25,14 @@ PASSWORD_SALT=change-me-password-salt
 CODE_SECRET=change-me-code-secret
 ```
 
+Если сервер работает по HTTP (без HTTPS), добавьте:
+
+```env
+AUTH_COOKIE_SECURE=false
+```
+
+Иначе secure-cookie может не записаться в браузер и после входа будет возвращать на `/login`.
+
 ## Регистрация и подтверждение
 
 - Реальная регистрация и вход работают через MySQL.
@@ -47,4 +55,3 @@ CODE_SECRET=change-me-code-secret
 - Автосоздание таблиц `users` и `email_verification_codes` при первом обращении.
 - API и таблицы для сущностей админки: `clients`, `suppliers`, `products`, `deals`, `deliveries`, `finances` (автосоздание).
 - На страницах клиентов/поставщиков/товаров включено сохранение в MySQL (добавление, редактирование, удаление).
-

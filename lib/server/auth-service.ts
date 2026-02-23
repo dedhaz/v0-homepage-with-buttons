@@ -6,6 +6,12 @@ import { ensureAuthTables, pool } from "@/lib/server/db"
 const CODE_TTL_MINUTES = 10
 const COOKIE_NAME = "auth_session"
 
+function shouldUseSecureCookie() {
+  if (process.env.AUTH_COOKIE_SECURE === "true") return true
+  if (process.env.AUTH_COOKIE_SECURE === "false") return false
+  return process.env.NODE_ENV === "production"
+}
+
 export type UserRole = "user" | "admin"
 
 function hashPassword(password: string) {
@@ -176,7 +182,7 @@ export async function loginWithPassword(payload: { email: string; password: stri
   cookieStore.set(COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: shouldUseSecureCookie(),
     path: "/",
     maxAge: 60 * 60 * 24 * 7,
   })

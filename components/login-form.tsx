@@ -41,7 +41,7 @@ export function LoginForm() {
       return
     }
 
-    router.push("/admin")
+    router.push("/admin/clients")
     router.refresh()
   }
 

@@ -23,7 +23,7 @@ function shouldUseSecureCookie() {
   return false
 }
 
-export type UserRole = "user" | "admin"
+export type UserRole = "user" | "manager" | "admin"
 
 function hashPassword(password: string) {
   return scryptSync(password, process.env.PASSWORD_SALT ?? "warehouse-auth-v1", 32).toString("hex")
@@ -246,4 +246,47 @@ export async function getCurrentUser() {
 export async function logout() {
   const cookieStore = await cookies()
   cookieStore.delete(COOKIE_NAME)
+}
+
+export async function listUsers() {
+  await ensureAuthTables()
+
+  const [rows] = await pool.execute<
+    (RowDataPacket & { id: number; email: string; fullName: string; role: UserRole; emailVerified: number; createdAt: string })[]
+  >(
+    "SELECT id, email, full_name as fullName, role, email_verified as emailVerified, DATE_FORMAT(created_at, '%Y-%m-%d') as createdAt FROM users ORDER BY id DESC",
+  )
+
+  return rows
+}
+
+export async function createUser(payload: { email: string; password: string; fullName: string; role: UserRole }) {
+  await ensureAuthTables()
+  const email = normalizeEmail(payload.email)
+
+  const [existing] = await pool.execute<(RowDataPacket & { id: number })[]>(
+    "SELECT id FROM users WHERE email = ? LIMIT 1",
+    [email],
+  )
+
+  if (existing.length > 0) {
+    return { ok: false as const, error: "Пользователь с таким e-mail уже существует." }
+  }
+
+  const [result] = await pool.execute<ResultSetHeader>(
+    "INSERT INTO users (email, password_hash, full_name, role, email_verified) VALUES (?, ?, ?, ?, 1)",
+    [email, hashPassword(payload.password), payload.fullName.trim(), payload.role],
+  )
+
+  return { ok: true as const, id: result.insertId }
+}
+
+export async function updateUserById(payload: { id: number; fullName: string; role: UserRole }) {
+  await ensureAuthTables()
+  await pool.execute("UPDATE users SET full_name = ?, role = ? WHERE id = ?", [payload.fullName.trim(), payload.role, payload.id])
+}
+
+export async function updateMyProfile(payload: { id: number; fullName: string; email: string }) {
+  await ensureAuthTables()
+  await pool.execute("UPDATE users SET full_name = ?, email = ? WHERE id = ?", [payload.fullName.trim(), normalizeEmail(payload.email), payload.id])
 }

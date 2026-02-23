@@ -20,7 +20,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { Plus, Pencil, Upload, X, FileText, ImageIcon, ArrowUpDown, ArrowUp, ArrowDown, Search, Trash2 } from "lucide-react"
+import { Plus, Pencil, Upload, X, FileText, ImageIcon, ArrowUpDown, ArrowUp, ArrowDown, Search, Trash2, Download, FileUp } from "lucide-react"
 
 /* ========== types ========== */
 interface ProductDimensions {
@@ -99,13 +99,13 @@ const emptyProduct: Omit<Product, "id"> = {
 }
 
 /* ========== mock clients / suppliers for autocomplete ========== */
-const clientCompanies = [
+const defaultClientCompanies = [
   'ООО "Техно-Импорт"',
   "ИП Козлова А.М.",
   'ООО "ГлобалТрейд"',
 ]
 
-const supplierCompanies = [
+const defaultSupplierCompanies = [
   "Шэньчжэнь Хуацян Электроникс",
   "Гуанчжоу Байда Трейдинг",
   "Иу Цзиньчэн Импорт Экспорт",
@@ -187,20 +187,43 @@ type Currency = "CNY" | "USD" | "RUB"
 const CURRENCY_LABELS: Record<Currency, string> = { CNY: "\u00A5", USD: "$", RUB: "\u20BD" }
 
 function calcVolumeCm(d: ProductDimensions): string {
-  const l = parseFloat(d.length)
-  const w = parseFloat(d.width)
-  const h = parseFloat(d.height)
+  const l = parseFloat(d.length.replace(",", "."))
+  const w = parseFloat(d.width.replace(",", "."))
+  const h = parseFloat(d.height.replace(",", "."))
   if (isNaN(l) || isNaN(w) || isNaN(h) || l === 0 || w === 0 || h === 0) return "\u2014"
   const m3 = (l * w * h) / 1_000_000
   return m3.toFixed(6) + " m\u00B3"
 }
 
 function convertToRub(price: string, currency: Currency, rates: { usd: number; cny: number }): string {
-  const v = parseFloat(price)
+  const v = parseFloat(price.replace(",", "."))
   if (isNaN(v) || v === 0) return "\u2014"
   if (currency === "RUB") return v.toFixed(2) + " \u20BD"
   if (currency === "USD") return (v * rates.usd).toFixed(2) + " \u20BD"
   return (v * rates.cny).toFixed(2) + " \u20BD"
+}
+
+function normalizeDecimalInput(value: string) {
+  const sanitized = value.replace(/\s+/g, "").replace(/[.]/g, ",").replace(/[^\d,]/g, "")
+  if (sanitized === "") return ""
+  if (sanitized === ",") return "0,"
+  if (sanitized.startsWith(",")) return `0${sanitized}`
+  const firstComma = sanitized.indexOf(",")
+  if (firstComma === -1) return sanitized
+  return `${sanitized.slice(0, firstComma + 1)}${sanitized.slice(firstComma + 1).replace(/,/g, "")}`
+}
+
+function formatTnvedInput(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 10)
+  const groups = [4, 2, 3, 1]
+  let index = 0
+  const parts: string[] = []
+  for (const group of groups) {
+    if (index >= digits.length) break
+    parts.push(digits.slice(index, index + group))
+    index += group
+  }
+  return parts.join(" ")
 }
 
 /* ========== autocomplete component ========== */
@@ -253,6 +276,8 @@ function AutocompleteInput({
 /* ========== main component ========== */
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>(seedProducts)
+  const [clientCompanies, setClientCompanies] = useState<string[]>(defaultClientCompanies)
+  const [supplierCompanies, setSupplierCompanies] = useState<string[]>(defaultSupplierCompanies)
   const [isSaving, setIsSaving] = useState(false)
   const [open, setOpen] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -266,6 +291,7 @@ export default function ProductsPage() {
 
   const photoInputRef = useRef<HTMLInputElement>(null)
   const docInputRef = useRef<HTMLInputElement>(null)
+  const importInputRef = useRef<HTMLInputElement>(null)
 
   /* search & filters */
   const [search, setSearch] = useState("")
@@ -369,6 +395,129 @@ export default function ProductsPage() {
       })
       .catch(() => {})
   }, [])
+
+  useEffect(() => {
+    fetch("/api/admin/clients")
+      .then((response) => response.json())
+      .then((result) => {
+        if (result?.ok && Array.isArray(result.items)) {
+          const options = result.items.map((item: { companyName?: string }) => item.companyName).filter(Boolean)
+          if (options.length > 0) setClientCompanies(options)
+        }
+      })
+      .catch(() => {})
+
+    fetch("/api/admin/suppliers")
+      .then((response) => response.json())
+      .then((result) => {
+        if (result?.ok && Array.isArray(result.items)) {
+          const options = result.items.map((item: { nameRu?: string; nameEn?: string }) => item.nameRu || item.nameEn).filter(Boolean)
+          if (options.length > 0) setSupplierCompanies(options)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  async function exportProductsToExcel(source: Product[]) {
+    const ExcelJS = (await import("exceljs")).default
+    const workbook = new ExcelJS.Workbook()
+    const sheet = workbook.addWorksheet("Товары")
+    sheet.columns = [
+      { header: "ID", key: "id", width: 10 },
+      { header: "Владелец", key: "owner", width: 28 },
+      { header: "Производитель", key: "manufacturer", width: 28 },
+      { header: "Артикул", key: "article", width: 20 },
+      { header: "ШК", key: "barcode", width: 20 },
+      { header: "ТНВЭД", key: "tnved", width: 16 },
+      { header: "Русское название", key: "nameRu", width: 40 },
+      { header: "Цена поставщика", key: "priceSupplier", width: 18 },
+      { header: "Валюта поставщика", key: "currencySupplier", width: 18 },
+      { header: "Цена продажи", key: "priceSale", width: 18 },
+      { header: "Валюта продажи", key: "currencySale", width: 18 },
+    ]
+
+    source.forEach((p) => {
+      sheet.addRow({
+        id: p.id,
+        owner: p.owner,
+        manufacturer: p.manufacturer,
+        article: p.article,
+        barcode: p.barcode,
+        tnved: p.tnved,
+        nameRu: p.nameRu,
+        priceSupplier: p.priceSupplier,
+        currencySupplier: p.currencySupplier,
+        priceSale: p.priceSale,
+        currencySale: p.currencySale,
+      })
+    })
+
+    const buffer = await workbook.xlsx.writeBuffer()
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "products.xlsx"
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function downloadTemplate() {
+    await exportProductsToExcel([])
+  }
+
+  async function handleImportExcel(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const ExcelJS = (await import("exceljs")).default
+    const workbook = new ExcelJS.Workbook()
+    const arrayBuffer = await file.arrayBuffer()
+    await workbook.xlsx.load(arrayBuffer)
+    const sheet = workbook.worksheets[0]
+    if (!sheet) return
+
+    const imported: Omit<Product, "id">[] = []
+    sheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return
+      const owner = String(row.getCell(2).value ?? "").trim()
+      const manufacturer = String(row.getCell(3).value ?? "").trim()
+      const article = String(row.getCell(4).value ?? "").trim()
+      if (!owner && !manufacturer && !article) return
+
+      imported.push({
+        ...emptyProduct,
+        owner,
+        manufacturer,
+        article,
+        barcode: String(row.getCell(5).value ?? "").trim(),
+        tnved: formatTnvedInput(String(row.getCell(6).value ?? "")),
+        nameRu: String(row.getCell(7).value ?? "").trim(),
+        priceSupplier: normalizeDecimalInput(String(row.getCell(8).value ?? "")),
+        currencySupplier: (String(row.getCell(9).value ?? "CNY").trim() as Currency) || "CNY",
+        priceSale: normalizeDecimalInput(String(row.getCell(10).value ?? "")),
+        currencySale: (String(row.getCell(11).value ?? "CNY").trim() as Currency) || "CNY",
+        dimUnit: { ...emptyDim },
+        dimPackage: { ...emptyDim },
+        photos: [],
+        documents: [],
+      })
+    })
+
+    for (const payload of imported) {
+      const response = await fetch("/api/admin/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      const result = await response.json().catch(() => null)
+      if (response.ok && result?.id) {
+        setProducts((prev) => [{ id: result.id, ...payload }, ...prev])
+      }
+    }
+
+    e.target.value = ""
+  }
 
   /* computed volumes */
   const volumeUnit = useMemo(() => calcVolumeCm(form.dimUnit), [form.dimUnit])
@@ -495,10 +644,31 @@ export default function ProductsPage() {
           <h1 className="font-display text-2xl font-bold text-foreground">Товары</h1>
           <p className="text-sm text-muted-foreground">{"Каталог товаров клиентов \u00B7 " + displayProducts.length + " из " + products.length}</p>
         </div>
-        <Button onClick={openNew} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Добавить товар
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" onClick={() => importInputRef.current?.click()} className="gap-2">
+            <FileUp className="h-4 w-4" />
+            Загрузить файл
+          </Button>
+          <Button variant="outline" onClick={downloadTemplate} className="gap-2">
+            <Download className="h-4 w-4" />
+            Скачать шаблон
+          </Button>
+          <Button variant="outline" onClick={() => exportProductsToExcel(displayProducts)} className="gap-2">
+            <Download className="h-4 w-4" />
+            Скачать все в Excel
+          </Button>
+          <Button onClick={openNew} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Добавить товар
+          </Button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            onChange={handleImportExcel}
+          />
+        </div>
       </div>
 
       {/* filters */}
@@ -726,7 +896,7 @@ export default function ProductsPage() {
                   <Label>Код ТНВЭД</Label>
                   <Input
                     value={form.tnved}
-                    onChange={(e) => setForm({ ...form, tnved: e.target.value })}
+                    onChange={(e) => setForm({ ...form, tnved: formatTnvedInput(e.target.value) })}
                     placeholder="9405 42 310 0"
                   />
                 </div>
@@ -793,10 +963,9 @@ export default function ProductsPage() {
                   <Label>Цена поставщика</Label>
                   <div className="flex gap-2">
                     <Input
-                      type="number"
                       step="0.01"
                       value={form.priceSupplier}
-                      onChange={(e) => setForm({ ...form, priceSupplier: e.target.value })}
+                      onChange={(e) => setForm({ ...form, priceSupplier: normalizeDecimalInput(e.target.value) })}
                       placeholder="90"
                       className="flex-1"
                     />
@@ -821,10 +990,9 @@ export default function ProductsPage() {
                   <Label>Цена продажи</Label>
                   <div className="flex gap-2">
                     <Input
-                      type="number"
                       step="0.01"
                       value={form.priceSale}
-                      onChange={(e) => setForm({ ...form, priceSale: e.target.value })}
+                      onChange={(e) => setForm({ ...form, priceSale: normalizeDecimalInput(e.target.value) })}
                       placeholder="24.00"
                       className="flex-1"
                     />
@@ -856,10 +1024,9 @@ export default function ProductsPage() {
                 <div className="space-y-2">
                   <Label>{"Длина, см"}</Label>
                   <Input
-                    type="number"
                     value={form.dimUnit.length}
                     onChange={(e) =>
-                      setForm({ ...form, dimUnit: { ...form.dimUnit, length: e.target.value } })
+                      setForm({ ...form, dimUnit: { ...form.dimUnit, length: normalizeDecimalInput(e.target.value) } })
                     }
                     placeholder="60"
                   />
@@ -867,10 +1034,9 @@ export default function ProductsPage() {
                 <div className="space-y-2">
                   <Label>{"Ширина, см"}</Label>
                   <Input
-                    type="number"
                     value={form.dimUnit.width}
                     onChange={(e) =>
-                      setForm({ ...form, dimUnit: { ...form.dimUnit, width: e.target.value } })
+                      setForm({ ...form, dimUnit: { ...form.dimUnit, width: normalizeDecimalInput(e.target.value) } })
                     }
                     placeholder="60"
                   />
@@ -878,10 +1044,9 @@ export default function ProductsPage() {
                 <div className="space-y-2">
                   <Label>{"Высота, см"}</Label>
                   <Input
-                    type="number"
                     value={form.dimUnit.height}
                     onChange={(e) =>
-                      setForm({ ...form, dimUnit: { ...form.dimUnit, height: e.target.value } })
+                      setForm({ ...form, dimUnit: { ...form.dimUnit, height: normalizeDecimalInput(e.target.value) } })
                     }
                     placeholder="1.2"
                   />
@@ -891,20 +1056,18 @@ export default function ProductsPage() {
                 <div className="space-y-2">
                   <Label>Вес нетто 1 шт.</Label>
                   <Input
-                    type="number"
                     step="0.01"
                     value={form.weightNettoUnit}
-                    onChange={(e) => setForm({ ...form, weightNettoUnit: e.target.value })}
+                    onChange={(e) => setForm({ ...form, weightNettoUnit: normalizeDecimalInput(e.target.value) })}
                     placeholder="2.8"
                   />
                 </div>
                 <div className="space-y-2">
                   <Label>Вес брутто 1 шт.</Label>
                   <Input
-                    type="number"
                     step="0.01"
                     value={form.weightBruttoUnit}
-                    onChange={(e) => setForm({ ...form, weightBruttoUnit: e.target.value })}
+                    onChange={(e) => setForm({ ...form, weightBruttoUnit: normalizeDecimalInput(e.target.value) })}
                     placeholder="3.2"
                   />
                 </div>
@@ -924,10 +1087,9 @@ export default function ProductsPage() {
                 <div className="space-y-2">
                   <Label>{"Длина, см"}</Label>
                   <Input
-                    type="number"
                     value={form.dimPackage.length}
                     onChange={(e) =>
-                      setForm({ ...form, dimPackage: { ...form.dimPackage, length: e.target.value } })
+                      setForm({ ...form, dimPackage: { ...form.dimPackage, length: normalizeDecimalInput(e.target.value) } })
                     }
                     placeholder="65"
                   />
@@ -935,10 +1097,9 @@ export default function ProductsPage() {
                 <div className="space-y-2">
                   <Label>{"Ширина, см"}</Label>
                   <Input
-                    type="number"
                     value={form.dimPackage.width}
                     onChange={(e) =>
-                      setForm({ ...form, dimPackage: { ...form.dimPackage, width: e.target.value } })
+                      setForm({ ...form, dimPackage: { ...form.dimPackage, width: normalizeDecimalInput(e.target.value) } })
                     }
                     placeholder="65"
                   />
@@ -946,10 +1107,9 @@ export default function ProductsPage() {
                 <div className="space-y-2">
                   <Label>{"Высота, см"}</Label>
                   <Input
-                    type="number"
                     value={form.dimPackage.height}
                     onChange={(e) =>
-                      setForm({ ...form, dimPackage: { ...form.dimPackage, height: e.target.value } })
+                      setForm({ ...form, dimPackage: { ...form.dimPackage, height: normalizeDecimalInput(e.target.value) } })
                     }
                     placeholder="28"
                   />
@@ -959,20 +1119,18 @@ export default function ProductsPage() {
                 <div className="space-y-2">
                   <Label>Вес нетто упаковки</Label>
                   <Input
-                    type="number"
                     step="0.01"
                     value={form.weightNettoPackage}
-                    onChange={(e) => setForm({ ...form, weightNettoPackage: e.target.value })}
+                    onChange={(e) => setForm({ ...form, weightNettoPackage: normalizeDecimalInput(e.target.value) })}
                     placeholder="14.0"
                   />
                 </div>
                 <div className="space-y-2">
                   <Label>Вес брутто упаковки</Label>
                   <Input
-                    type="number"
                     step="0.01"
                     value={form.weightBruttoPackage}
-                    onChange={(e) => setForm({ ...form, weightBruttoPackage: e.target.value })}
+                    onChange={(e) => setForm({ ...form, weightBruttoPackage: normalizeDecimalInput(e.target.value) })}
                     placeholder="16.5"
                   />
                 </div>

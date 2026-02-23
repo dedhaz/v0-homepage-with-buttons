@@ -198,6 +198,8 @@ const seedClients: Client[] = [
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>(seedClients)
   const [isSaving, setIsSaving] = useState(false)
+  const [isInnLookupLoading, setIsInnLookupLoading] = useState(false)
+  const [isBikLookupLoading, setIsBikLookupLoading] = useState(false)
   const [open, setOpen] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState<Omit<Client, "id" | "createdAt">>({ ...emptyClient, address: { ...emptyAddress } })
@@ -352,6 +354,63 @@ export default function ClientsPage() {
 
   function updateAddress<K extends keyof ClientAddress>(key: K, value: string) {
     setForm((prev) => ({ ...prev, address: { ...prev.address, [key]: value } }))
+  }
+
+  async function lookupCompanyByInn() {
+    const inn = form.inn.trim()
+    if (!/^\d{10}(\d{2})?$/.test(inn)) return
+
+    setIsInnLookupLoading(true)
+    try {
+      const response = await fetch(`/api/lookup/company-by-inn?inn=${encodeURIComponent(inn)}`)
+      const result = await response.json().catch(() => null)
+
+      if (!response.ok || !result?.company) {
+        return
+      }
+
+      const company = result.company as {
+        ogrn?: string
+        companyName?: string
+        address?: Partial<ClientAddress>
+      }
+
+      setForm((prev) => ({
+        ...prev,
+        ogrn: company.ogrn || prev.ogrn,
+        companyName: company.companyName || prev.companyName,
+        address: {
+          ...prev.address,
+          ...(company.address ?? {}),
+        },
+      }))
+    } finally {
+      setIsInnLookupLoading(false)
+    }
+  }
+
+  async function lookupBankByBik() {
+    const bik = form.bik.trim()
+    if (!/^\d{9}$/.test(bik)) return
+
+    setIsBikLookupLoading(true)
+    try {
+      const response = await fetch(`/api/lookup/bank-by-bik?bik=${encodeURIComponent(bik)}`)
+      const result = await response.json().catch(() => null)
+
+      if (!response.ok || !result?.bank) {
+        return
+      }
+
+      const bank = result.bank as { bankName?: string; ks?: string }
+      setForm((prev) => ({
+        ...prev,
+        bankName: bank.bankName || prev.bankName,
+        ks: bank.ks || prev.ks,
+      }))
+    } finally {
+      setIsBikLookupLoading(false)
+    }
   }
 
   return (
@@ -624,7 +683,13 @@ export default function ClientsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>ИНН</Label>
-                  <Input value={form.inn} onChange={(e) => updateField("inn", e.target.value)} placeholder="7707123456" />
+                  <Input
+                    value={form.inn}
+                    onChange={(e) => updateField("inn", e.target.value)}
+                    onBlur={lookupCompanyByInn}
+                    placeholder="7707123456"
+                  />
+                  {isInnLookupLoading && <p className="text-xs text-muted-foreground">Поиск компании по ИНН...</p>}
                 </div>
                 {form.type === "ООО" && (
                   <div className="space-y-2">
@@ -649,7 +714,13 @@ export default function ClientsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>БИК</Label>
-                  <Input value={form.bik} onChange={(e) => updateField("bik", e.target.value)} placeholder="044525225" />
+                  <Input
+                    value={form.bik}
+                    onChange={(e) => updateField("bik", e.target.value)}
+                    onBlur={lookupBankByBik}
+                    placeholder="044525225"
+                  />
+                  {isBikLookupLoading && <p className="text-xs text-muted-foreground">Поиск банка по БИК...</p>}
                 </div>
                 <div className="space-y-2">
                   <Label>Название банка</Label>

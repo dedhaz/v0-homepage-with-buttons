@@ -6,6 +6,10 @@ export async function GET() {
   const auth = await requireAuth()
   if (auth.response) return auth.response
 
+  if (auth.user?.role === "user") {
+    return NextResponse.json({ ok: false, error: "Нет доступа." }, { status: 403 })
+  }
+
   const items = await listAdminRecords("products")
   return NextResponse.json({ ok: true, items })
 }
@@ -13,6 +17,10 @@ export async function GET() {
 export async function POST(request: Request) {
   const auth = await requireAuth()
   if (auth.response) return auth.response
+
+  if (auth.user?.role === "user") {
+    return NextResponse.json({ ok: false, error: "Нет доступа." }, { status: 403 })
+  }
 
   const body = await request.json().catch(() => null)
   if (!body || typeof body !== "object") {

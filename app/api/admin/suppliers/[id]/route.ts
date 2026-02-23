@@ -6,6 +6,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const auth = await requireAuth()
   if (auth.response) return auth.response
 
+  if (auth.user?.role === "user") {
+    return NextResponse.json({ ok: false, error: "Нет доступа." }, { status: 403 })
+  }
+
   const { id } = await params
   const numericId = Number(id)
   if (!Number.isFinite(numericId)) {
@@ -24,6 +28,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAuth()
   if (auth.response) return auth.response
+
+  if (auth.user?.role === "user") {
+    return NextResponse.json({ ok: false, error: "Нет доступа." }, { status: 403 })
+  }
 
   const { id } = await params
   const numericId = Number(id)

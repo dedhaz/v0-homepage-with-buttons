@@ -20,7 +20,23 @@ export interface VerifyRegistrationResult {
   error?: string
   user?: {
     id: number
-    role: "user" | "admin"
+    role: "user" | "manager" | "admin"
+  }
+}
+
+export interface LoginPayload {
+  email: string
+  password: string
+}
+
+export interface LoginResult {
+  ok: boolean
+  error?: string
+  user?: {
+    id: number
+    email: string
+    fullName: string
+    role: "user" | "manager" | "admin"
   }
 }
 

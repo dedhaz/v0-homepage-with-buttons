@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useEffect, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { Users, Handshake, Truck, Package, Wallet, Settings, LogOut, Factory } from "lucide-react"
 
@@ -38,6 +39,25 @@ export function AdminSidebar() {
     router.refresh()
   }
 
+  const [role, setRole] = useState<"admin" | "manager" | "user">("user")
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((response) => response.json())
+      .then((result) => {
+        if (result?.ok && result.user?.role) {
+          setRole(result.user.role)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  const visibleItems = navItems.filter((item) => {
+    if (role === "admin") return true
+    if (role === "manager") return true
+    return item.href === "/admin/settings"
+  })
+
   return (
     <Sidebar>
       <SidebarHeader className="border-b border-sidebar-border px-4 py-4">
@@ -57,7 +77,7 @@ export function AdminSidebar() {
           <SidebarGroupLabel>Меню</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => {
+              {visibleItems.map((item) => {
                 const isActive = pathname.startsWith(item.href)
                 return (
                   <SidebarMenuItem key={item.href}>

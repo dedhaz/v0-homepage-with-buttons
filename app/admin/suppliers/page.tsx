@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   Table,
   TableBody,
@@ -19,7 +19,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { Plus, Pencil } from "lucide-react"
+import { Plus, Pencil, Trash2 } from "lucide-react"
 
 /* ---------- types ---------- */
 interface SupplierAddress {
@@ -128,6 +128,7 @@ const seedSuppliers: Supplier[] = [
 /* ---------- component ---------- */
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>(seedSuppliers)
+  const [isSaving, setIsSaving] = useState(false)
   const [open, setOpen] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState<Omit<Supplier, "id">>({
@@ -136,6 +137,17 @@ export default function SuppliersPage() {
     bank: { ...emptySupplier.bank },
     tags: [],
   })
+
+  useEffect(() => {
+    fetch("/api/admin/suppliers")
+      .then((response) => response.json())
+      .then((result) => {
+        if (result?.ok && Array.isArray(result.items)) {
+          setSuppliers(result.items)
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   function openNew() {
     setEditingId(null)
@@ -160,29 +172,50 @@ export default function SuppliersPage() {
     setOpen(true)
   }
 
-  function handleSave() {
+  async function handleSave() {
+    setIsSaving(true)
+
+    try {
     if (editingId !== null) {
-      setSuppliers((prev) =>
-        prev.map((s) =>
-          s.id === editingId
-            ? { ...s, ...form, address: { ...form.address }, bank: { ...form.bank }, tags: [...form.tags] }
-            : s
-        )
-      )
+      const payload = { ...form, address: { ...form.address }, bank: { ...form.bank }, tags: [...form.tags] }
+      const response = await fetch(`/api/admin/suppliers/${editingId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      if (!response.ok) throw new Error("save failed")
+
+      setSuppliers((prev) => prev.map((s) => (s.id === editingId ? { ...s, ...payload } : s)))
     } else {
-      const newId = suppliers.length > 0 ? Math.max(...suppliers.map((s) => s.id)) + 1 : 1
-      setSuppliers((prev) => [
-        ...prev,
-        {
-          id: newId,
-          ...form,
-          address: { ...form.address },
-          bank: { ...form.bank },
-          tags: [...form.tags],
-        },
-      ])
+      const payload = { ...form, address: { ...form.address }, bank: { ...form.bank }, tags: [...form.tags] }
+      const response = await fetch("/api/admin/suppliers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      const result = await response.json().catch(() => null)
+      if (!response.ok || !result?.id) throw new Error("create failed")
+
+      setSuppliers((prev) => [{ id: result.id, ...payload }, ...prev])
     }
     setOpen(false)
+    } catch {
+      alert("Не удалось сохранить поставщика")
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function handleDelete(supplierId: number) {
+    if (!confirm("Удалить поставщика?")) return
+
+    const response = await fetch(`/api/admin/suppliers/${supplierId}`, { method: "DELETE" })
+    if (!response.ok) {
+      alert("Не удалось удалить поставщика")
+      return
+    }
+
+    setSuppliers((prev) => prev.filter((item) => item.id !== supplierId))
   }
 
   function toggleTag(tag: SupplierTag) {
@@ -242,17 +275,30 @@ export default function SuppliersPage() {
                   </div>
                 </TableCell>
                 <TableCell>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      openEdit(supplier)
-                    }}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openEdit(supplier)
+                      }}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDelete(supplier.id)
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -423,8 +469,8 @@ export default function SuppliersPage() {
 
             {/* --- actions --- */}
             <div className="flex gap-3 border-t border-border pt-6">
-              <Button onClick={handleSave} className="flex-1">
-                {editingId !== null ? "Сохранить" : "Добавить поставщика"}
+              <Button onClick={handleSave} className="flex-1" disabled={isSaving}>
+                {isSaving ? "Сохраняем..." : editingId !== null ? "Сохранить" : "Добавить поставщика"}
               </Button>
               <Button variant="outline" onClick={() => setOpen(false)} className="flex-1">
                 Отмена

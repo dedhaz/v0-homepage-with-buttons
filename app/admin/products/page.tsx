@@ -20,7 +20,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { Plus, Pencil, Upload, X, FileText, ImageIcon, ArrowUpDown, ArrowUp, ArrowDown, Search } from "lucide-react"
+import { Plus, Pencil, Upload, X, FileText, ImageIcon, ArrowUpDown, ArrowUp, ArrowDown, Search, Trash2 } from "lucide-react"
 
 /* ========== types ========== */
 interface ProductDimensions {
@@ -253,6 +253,7 @@ function AutocompleteInput({
 /* ========== main component ========== */
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>(seedProducts)
+  const [isSaving, setIsSaving] = useState(false)
   const [open, setOpen] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState<Omit<Product, "id">>({
@@ -358,6 +359,17 @@ export default function ProductsPage() {
       .catch(() => { /* keep default rates */ })
   }, [])
 
+  useEffect(() => {
+    fetch("/api/admin/products")
+      .then((response) => response.json())
+      .then((result) => {
+        if (result?.ok && Array.isArray(result.items)) {
+          setProducts(result.items)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
   /* computed volumes */
   const volumeUnit = useMemo(() => calcVolumeCm(form.dimUnit), [form.dimUnit])
   const volumePackage = useMemo(() => calcVolumeCm(form.dimPackage), [form.dimPackage])
@@ -387,37 +399,59 @@ export default function ProductsPage() {
     setOpen(true)
   }
 
-  function handleSave() {
-    if (editingId !== null) {
-      setProducts((prev) =>
-        prev.map((p) =>
-          p.id === editingId
-            ? {
-                ...p,
-                ...form,
-                dimUnit: { ...form.dimUnit },
-                dimPackage: { ...form.dimPackage },
-                photos: [...form.photos],
-                documents: [...form.documents],
-              }
-            : p
-        )
-      )
-    } else {
-      const newId = products.length > 0 ? Math.max(...products.map((p) => p.id)) + 1 : 1
-      setProducts((prev) => [
-        ...prev,
-        {
-          id: newId,
-          ...form,
-          dimUnit: { ...form.dimUnit },
-          dimPackage: { ...form.dimPackage },
-          photos: [...form.photos],
-          documents: [...form.documents],
-        },
-      ])
+  async function handleSave() {
+    setIsSaving(true)
+
+    try {
+      const payload = {
+        ...form,
+        dimUnit: { ...form.dimUnit },
+        dimPackage: { ...form.dimPackage },
+        photos: [...form.photos],
+        documents: [...form.documents],
+      }
+
+      if (editingId !== null) {
+        const response = await fetch(`/api/admin/products/${editingId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+
+        if (!response.ok) throw new Error("save failed")
+
+        setProducts((prev) => prev.map((item) => (item.id === editingId ? { ...item, ...payload } : item)))
+      } else {
+        const response = await fetch("/api/admin/products", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+        const result = await response.json().catch(() => null)
+
+        if (!response.ok || !result?.id) throw new Error("create failed")
+
+        setProducts((prev) => [{ id: result.id, ...payload }, ...prev])
+      }
+
+      setOpen(false)
+    } catch {
+      alert("Не удалось сохранить товар")
+    } finally {
+      setIsSaving(false)
     }
-    setOpen(false)
+  }
+
+  async function handleDelete(productId: number) {
+    if (!confirm("Удалить товар?")) return
+
+    const response = await fetch(`/api/admin/products/${productId}`, { method: "DELETE" })
+    if (!response.ok) {
+      alert("Не удалось удалить товар")
+      return
+    }
+
+    setProducts((prev) => prev.filter((item) => item.id !== productId))
   }
 
   function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -578,17 +612,30 @@ export default function ProductsPage() {
                   <TableCell className="text-right">{p.priceSale} {CURRENCY_LABELS[p.currencySale]}</TableCell>
                   <TableCell className="font-mono text-xs">{p.barcode}</TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        openEdit(p)
-                      }}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          openEdit(p)
+                        }}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDelete(p.id)
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
@@ -1120,8 +1167,8 @@ export default function ProductsPage() {
 
             {/* actions */}
             <div className="flex gap-3 border-t border-border pt-6">
-              <Button onClick={handleSave} className="flex-1">
-                {editingId !== null ? "Сохранит��" : "Добавить товар"}
+              <Button onClick={handleSave} className="flex-1" disabled={isSaving}>
+                {isSaving ? "Сохраняем..." : editingId !== null ? "Сохранить" : "Добавить товар"}
               </Button>
               <Button variant="outline" onClick={() => setOpen(false)} className="flex-1">
                 Отмена

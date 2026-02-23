@@ -1,17 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
-import {
-  Users,
-  Handshake,
-  Truck,
-  Package,
-  Wallet,
-  Settings,
-  LogOut,
-  Factory,
-} from "lucide-react"
+import { usePathname, useRouter } from "next/navigation"
+import { Users, Handshake, Truck, Package, Wallet, Settings, LogOut, Factory } from "lucide-react"
 
 import {
   Sidebar,
@@ -39,6 +30,13 @@ const navItems = [
 
 export function AdminSidebar() {
   const pathname = usePathname()
+  const router = useRouter()
+
+  const handleLogout = async () => {
+    await fetch("/api/logout", { method: "POST" })
+    router.push("/login")
+    router.refresh()
+  }
 
   return (
     <Sidebar>
@@ -48,12 +46,8 @@ export function AdminSidebar() {
             <span className="text-sm font-bold text-sidebar-primary-foreground">13</span>
           </div>
           <div className="flex flex-col">
-            <span className="text-sm font-bold text-sidebar-foreground">
-              Склад 13
-            </span>
-            <span className="text-xs text-sidebar-foreground/60">
-              Панель управления
-            </span>
+            <span className="text-sm font-bold text-sidebar-foreground">Склад 13</span>
+            <span className="text-xs text-sidebar-foreground/60">Панель управления</span>
           </div>
         </Link>
       </SidebarHeader>
@@ -84,11 +78,9 @@ export function AdminSidebar() {
       <SidebarFooter className="border-t border-sidebar-border">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild>
-              <Link href="/">
-                <LogOut className="h-4 w-4" />
-                <span>Выйти</span>
-              </Link>
+            <SidebarMenuButton onClick={handleLogout}>
+              <LogOut className="h-4 w-4" />
+              <span>Выйти</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

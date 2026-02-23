@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { RegisterVerificationForm } from "@/components/register-verification-form"
@@ -12,7 +13,9 @@ export default function RegisterVerifyPage() {
     <div className="flex min-h-screen flex-col">
       <Header />
       <main className="flex flex-1 items-center justify-center px-6 py-16">
-        <RegisterVerificationForm />
+        <Suspense fallback={<div className="text-sm text-muted-foreground">Загрузка...</div>}>
+          <RegisterVerificationForm />
+        </Suspense>
       </main>
       <Footer />
     </div>

@@ -24,6 +24,22 @@ export interface VerifyRegistrationResult {
   }
 }
 
+export interface LoginPayload {
+  email: string
+  password: string
+}
+
+export interface LoginResult {
+  ok: boolean
+  error?: string
+  user?: {
+    id: number
+    email: string
+    fullName: string
+    role: "user" | "admin"
+  }
+}
+
 async function parseJsonSafe<T>(response: Response): Promise<T | null> {
   try {
     return (await response.json()) as T
@@ -66,6 +82,25 @@ export async function verifyRegistrationCode(
     return {
       ok: false,
       error: result?.error ?? "Не удалось подтвердить код.",
+    }
+  }
+
+  return result ?? { ok: false, error: "Пустой ответ сервера." }
+}
+
+export async function login(payload: LoginPayload): Promise<LoginResult> {
+  const response = await fetch("/api/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+
+  const result = await parseJsonSafe<LoginResult>(response)
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      error: result?.error ?? "Не удалось выполнить вход.",
     }
   }
 

@@ -2,6 +2,7 @@ import { createHmac, randomInt, randomUUID, scryptSync, timingSafeEqual } from "
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise"
 import { cookies } from "next/headers"
 import { ensureAuthTables, pool } from "@/lib/server/db"
+import { logError, logInfo } from "@/lib/server/logger"
 
 const CODE_TTL_MINUTES = 10
 const COOKIE_NAME = "auth_session"
@@ -9,7 +10,17 @@ const COOKIE_NAME = "auth_session"
 function shouldUseSecureCookie() {
   if (process.env.AUTH_COOKIE_SECURE === "true") return true
   if (process.env.AUTH_COOKIE_SECURE === "false") return false
-  return process.env.NODE_ENV === "production"
+
+  const appUrl = process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL
+  if (appUrl) {
+    try {
+      return new URL(appUrl).protocol === "https:"
+    } catch {
+      return false
+    }
+  }
+
+  return false
 }
 
 export type UserRole = "user" | "admin"
@@ -179,13 +190,16 @@ export async function loginWithPassword(payload: { email: string; password: stri
   })
 
   const cookieStore = await cookies()
+  const secureCookie = shouldUseSecureCookie()
   cookieStore.set(COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: shouldUseSecureCookie(),
+    secure: secureCookie,
     path: "/",
     maxAge: 60 * 60 * 24 * 7,
   })
+
+  await logInfo("User logged in", { userId: user.id, secureCookie })
 
   return {
     ok: true as const,
@@ -201,17 +215,30 @@ export async function loginWithPassword(payload: { email: string; password: stri
 export async function getCurrentUser() {
   const cookieStore = await cookies()
   const token = cookieStore.get(COOKIE_NAME)?.value
-  if (!token) return null
+  if (!token) {
+    await logInfo("Auth check: no cookie")
+    return null
+  }
 
   const payload = verifySession(token)
-  if (!payload) return null
+  if (!payload) {
+    await logInfo("Auth check: invalid token")
+    return null
+  }
 
   await ensureAuthTables()
 
-  const [rows] = await pool.execute<(RowDataPacket & { id: number; email: string; fullName: string; role: UserRole })[]>(
-    "SELECT id, email, full_name AS fullName, role FROM users WHERE id = ? LIMIT 1",
-    [payload.uid],
-  )
+  const [rows] = await pool
+    .execute<(RowDataPacket & { id: number; email: string; fullName: string; role: UserRole })[]>(
+      "SELECT id, email, full_name AS fullName, role FROM users WHERE id = ? LIMIT 1",
+      [payload.uid],
+    )
+    .catch(async (error) => {
+      await logError("Auth check: db error", {
+        message: error instanceof Error ? error.message : "unknown",
+      })
+      return [[] as (RowDataPacket & { id: number; email: string; fullName: string; role: UserRole })[], null] as const
+    })
 
   return rows[0] ?? null
 }

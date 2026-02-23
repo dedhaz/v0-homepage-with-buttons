@@ -100,7 +100,7 @@ export async function startRegistration(payload: { email: string; password: stri
 
   return {
     ok: true as const,
-    demoCode: process.env.NODE_ENV === "production" ? undefined : code,
+    demoCode: code,
   }
 }
 
@@ -110,19 +110,19 @@ export async function verifyRegistrationCode(payload: { email: string; code: str
   const email = normalizeEmail(payload.email)
 
   const [rows] = await pool.execute<
-    (RowDataPacket & { id: number; role: UserRole; codeHash: string; expiresAt: Date })[]
+    (RowDataPacket & { id: number; role: UserRole; codeHash: string })[]
   >(
-    `SELECT u.id, u.role, evc.code_hash AS codeHash, evc.expires_at AS expiresAt
+    `SELECT u.id, u.role, evc.code_hash AS codeHash
      FROM users u
      JOIN email_verification_codes evc ON evc.user_id = u.id
-     WHERE u.email = ? AND evc.consumed_at IS NULL
+     WHERE u.email = ? AND evc.consumed_at IS NULL AND evc.expires_at > NOW()
      ORDER BY evc.id DESC
      LIMIT 1`,
     [email],
   )
 
   const row = rows[0]
-  if (!row || row.expiresAt.getTime() <= Date.now()) {
+  if (!row) {
     return { ok: false as const, error: "Код не найден или истёк. Запросите новый код." }
   }
 

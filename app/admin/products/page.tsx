@@ -411,12 +411,50 @@ export default function ProductsPage() {
       .then((response) => response.json())
       .then((result) => {
         if (result?.ok && Array.isArray(result.items)) {
-          const options = result.items.map((item: { nameRu?: string; nameEn?: string }) => item.nameRu || item.nameEn).filter(Boolean)
+          const options = result.items
+            .flatMap((item: { nameRu?: string; nameEn?: string; nameZh?: string }) => [item.nameRu, item.nameEn, item.nameZh])
+            .filter((value: string | undefined): value is string => Boolean(value && value.trim()))
           if (options.length > 0) setSupplierCompanies(options)
         }
       })
       .catch(() => {})
   }, [])
+
+  function nextCopyArticle(article: string) {
+    const base = article.replace(/\s*\(\d+\)\s*$/, "").trim()
+    let index = 1
+    const existing = new Set(products.map((p) => p.article.trim()))
+    let candidate = `${base} (${index})`
+    while (existing.has(candidate)) {
+      index += 1
+      candidate = `${base} (${index})`
+    }
+    return candidate
+  }
+
+  async function copyProduct(product: Product) {
+    const payload: Omit<Product, "id"> = {
+      ...product,
+      article: nextCopyArticle(product.article),
+      dimUnit: { ...product.dimUnit },
+      dimPackage: { ...product.dimPackage },
+      photos: [...product.photos],
+      documents: [...product.documents],
+    }
+
+    const response = await fetch("/api/admin/products", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+    const result = await response.json().catch(() => null)
+    if (!response.ok || !result?.id) {
+      alert("Не удалось скопировать товар")
+      return
+    }
+
+    setProducts((prev) => [{ id: result.id, ...payload }, ...prev])
+  }
 
   async function exportProductsToExcel(source: Product[]) {
     const ExcelJS = (await import("exceljs")).default
@@ -434,6 +472,30 @@ export default function ProductsPage() {
       { header: "Валюта поставщика", key: "currencySupplier", width: 18 },
       { header: "Цена продажи", key: "priceSale", width: 18 },
       { header: "Валюта продажи", key: "currencySale", width: 18 },
+      { header: "Название CN", key: "nameZh", width: 26 },
+      { header: "Название EN", key: "nameEn", width: 26 },
+      { header: "Состав", key: "composition", width: 40 },
+      { header: "Длина 1 шт", key: "dimUnitLength", width: 12 },
+      { header: "Ширина 1 шт", key: "dimUnitWidth", width: 12 },
+      { header: "Высота 1 шт", key: "dimUnitHeight", width: 12 },
+      { header: "Вес нетто 1 шт", key: "weightNettoUnit", width: 14 },
+      { header: "Вес брутто 1 шт", key: "weightBruttoUnit", width: 14 },
+      { header: "Длина упак", key: "dimPackageLength", width: 12 },
+      { header: "Ширина упак", key: "dimPackageWidth", width: 12 },
+      { header: "Высота упак", key: "dimPackageHeight", width: 12 },
+      { header: "Вес нетто упак", key: "weightNettoPackage", width: 14 },
+      { header: "Вес брутто упак", key: "weightBruttoPackage", width: 14 },
+      { header: "Кол-во в упак", key: "qtyInPackage", width: 12 },
+      { header: "Пошлина %", key: "dutyPercent", width: 12 },
+      { header: "НДС %", key: "vatPercent", width: 10 },
+      { header: "Акциз", key: "excise", width: 12 },
+      { header: "Антидемпинг", key: "antiDumping", width: 14 },
+      { header: "Тип разрешения", key: "permitDocType", width: 18 },
+      { header: "Номер разрешения", key: "permitDocNumber", width: 22 },
+      { header: "Дата разрешения", key: "permitDocDate", width: 16 },
+      { header: "Файл разрешения", key: "permitDocFile", width: 24 },
+      { header: "Фото (через ;) ", key: "photos", width: 36 },
+      { header: "Документы JSON", key: "documents", width: 40 },
     ]
 
     source.forEach((p) => {
@@ -449,6 +511,30 @@ export default function ProductsPage() {
         currencySupplier: p.currencySupplier,
         priceSale: p.priceSale,
         currencySale: p.currencySale,
+        nameZh: p.nameZh,
+        nameEn: p.nameEn,
+        composition: p.composition,
+        dimUnitLength: p.dimUnit.length,
+        dimUnitWidth: p.dimUnit.width,
+        dimUnitHeight: p.dimUnit.height,
+        weightNettoUnit: p.weightNettoUnit,
+        weightBruttoUnit: p.weightBruttoUnit,
+        dimPackageLength: p.dimPackage.length,
+        dimPackageWidth: p.dimPackage.width,
+        dimPackageHeight: p.dimPackage.height,
+        weightNettoPackage: p.weightNettoPackage,
+        weightBruttoPackage: p.weightBruttoPackage,
+        qtyInPackage: p.qtyInPackage,
+        dutyPercent: p.dutyPercent,
+        vatPercent: p.vatPercent,
+        excise: p.excise,
+        antiDumping: p.antiDumping,
+        permitDocType: p.permitDocType,
+        permitDocNumber: p.permitDocNumber,
+        permitDocDate: p.permitDocDate,
+        permitDocFile: p.permitDocFile,
+        photos: p.photos.join(";"),
+        documents: JSON.stringify(p.documents),
       })
     })
 
@@ -497,10 +583,43 @@ export default function ProductsPage() {
         currencySupplier: (String(row.getCell(9).value ?? "CNY").trim() as Currency) || "CNY",
         priceSale: normalizeDecimalInput(String(row.getCell(10).value ?? "")),
         currencySale: (String(row.getCell(11).value ?? "CNY").trim() as Currency) || "CNY",
-        dimUnit: { ...emptyDim },
-        dimPackage: { ...emptyDim },
-        photos: [],
-        documents: [],
+        nameZh: String(row.getCell(12).value ?? "").trim(),
+        nameEn: String(row.getCell(13).value ?? "").trim(),
+        composition: String(row.getCell(14).value ?? "").trim(),
+        dimUnit: {
+          length: normalizeDecimalInput(String(row.getCell(15).value ?? "")),
+          width: normalizeDecimalInput(String(row.getCell(16).value ?? "")),
+          height: normalizeDecimalInput(String(row.getCell(17).value ?? "")),
+        },
+        weightNettoUnit: normalizeDecimalInput(String(row.getCell(18).value ?? "")),
+        weightBruttoUnit: normalizeDecimalInput(String(row.getCell(19).value ?? "")),
+        dimPackage: {
+          length: normalizeDecimalInput(String(row.getCell(20).value ?? "")),
+          width: normalizeDecimalInput(String(row.getCell(21).value ?? "")),
+          height: normalizeDecimalInput(String(row.getCell(22).value ?? "")),
+        },
+        weightNettoPackage: normalizeDecimalInput(String(row.getCell(23).value ?? "")),
+        weightBruttoPackage: normalizeDecimalInput(String(row.getCell(24).value ?? "")),
+        qtyInPackage: String(row.getCell(25).value ?? "").trim(),
+        dutyPercent: normalizeDecimalInput(String(row.getCell(26).value ?? "")),
+        vatPercent: (["0", "10", "22"].includes(String(row.getCell(27).value ?? "")) ? String(row.getCell(27).value) : "22") as Product["vatPercent"],
+        excise: normalizeDecimalInput(String(row.getCell(28).value ?? "")),
+        antiDumping: normalizeDecimalInput(String(row.getCell(29).value ?? "")),
+        permitDocType: String(row.getCell(30).value ?? "") as Product["permitDocType"],
+        permitDocNumber: String(row.getCell(31).value ?? "").trim(),
+        permitDocDate: String(row.getCell(32).value ?? "").trim(),
+        permitDocFile: String(row.getCell(33).value ?? "").trim(),
+        photos: String(row.getCell(34).value ?? "").split(";").map((x) => x.trim()).filter(Boolean),
+        documents: (() => {
+          const raw = String(row.getCell(35).value ?? "").trim()
+          if (!raw) return []
+          try {
+            const parsed = JSON.parse(raw)
+            return Array.isArray(parsed) ? parsed : []
+          } catch {
+            return []
+          }
+        })(),
       })
     })
 
@@ -783,6 +902,18 @@ export default function ProductsPage() {
                   <TableCell className="font-mono text-xs">{p.barcode}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          copyProduct(p)
+                        }}
+                        title="Скопировать"
+                      >
+                        <FileText className="h-4 w-4" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"

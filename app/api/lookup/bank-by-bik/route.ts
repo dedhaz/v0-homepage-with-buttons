@@ -6,6 +6,11 @@ function xmlValue(xml: string, tag: string) {
   return match?.[1]?.trim() ?? ""
 }
 
+function xmlAttrValue(xml: string, attr: string) {
+  const match = xml.match(new RegExp(`${attr}="([^"]+)"`, "i"))
+  return match?.[1]?.trim() ?? ""
+}
+
 export async function GET(request: Request) {
   const auth = await requireAuth()
   if (auth.response) return auth.response
@@ -27,8 +32,12 @@ export async function GET(request: Request) {
   }
 
   const xml = await response.text().catch(() => "")
-  const bankName = xmlValue(xml, "VKEY") || xmlValue(xml, "NAMEP")
-  const ks = xmlValue(xml, "KSNP")
+  const bankName =
+    xmlAttrValue(xml, "NameP") ||
+    xmlValue(xml, "NameP") ||
+    xmlValue(xml, "VKEY") ||
+    xmlValue(xml, "NAMEP")
+  const ks = xmlAttrValue(xml, "Ksnp") || xmlValue(xml, "KSNP")
 
   if (!bankName && !ks) {
     return NextResponse.json({ ok: false, error: "Банк по БИК не найден" }, { status: 404 })

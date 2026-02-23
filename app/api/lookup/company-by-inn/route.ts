@@ -16,6 +16,38 @@ function parseAddress(addressRaw: string) {
   }
 }
 
+function toTitleCase(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/(^|\s|-)([a-zа-яё])/giu, (_m, sep: string, ch: string) => `${sep}${ch.toUpperCase()}`)
+}
+
+function normalizeCompanyName(raw: string) {
+  const normalized = raw.replace(/\s+/g, " ").trim()
+  if (!normalized) return ""
+
+  const ipMatch = normalized.match(/(?:индивидуальный\s+предприниматель|ип)\s+(.+)$/i)
+  if (ipMatch?.[1]) {
+    return `ИП ${toTitleCase(ipMatch[1].replace(/["']/g, "").trim())}`
+  }
+
+  return normalized
+}
+
+function getAddressRaw(row: Record<string, unknown>) {
+  const direct = typeof row.a === "string" ? row.a : ""
+  if (direct.trim()) return direct.trim()
+
+  const addr = row.a as Record<string, unknown> | undefined
+  if (addr && typeof addr === "object") {
+    const text = typeof addr.a === "string" ? addr.a : typeof addr.c === "string" ? addr.c : ""
+    if (text.trim()) return text.trim()
+  }
+
+  const alt = [row.adr, row.address, row.address_full].find((v) => typeof v === "string")
+  return typeof alt === "string" ? alt.trim() : ""
+}
+
 export async function GET(request: Request) {
   const auth = await requireAuth()
   if (auth.response) return auth.response
@@ -54,7 +86,7 @@ export async function GET(request: Request) {
   }
 
   const resultData = (await resultResponse.json().catch(() => null)) as
-    | { rows?: Array<{ n?: string; c?: string; o?: string; a?: string }> }
+    | { rows?: Array<Record<string, unknown> & { n?: string; c?: string; o?: string }> }
     | null
 
   const row = resultData?.rows?.[0]
@@ -62,13 +94,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "Компания не найдена" }, { status: 404 })
   }
 
-  const addressRaw = row.a?.trim() ?? ""
+  const addressRaw = getAddressRaw(row)
 
   return NextResponse.json({
     ok: true,
     company: {
       ogrn: row.o?.trim() ?? "",
-      companyName: row.n?.trim() || row.c?.trim() || "",
+      companyName: normalizeCompanyName(row.n?.trim() || row.c?.trim() || ""),
       addressRaw,
       address: parseAddress(addressRaw),
     },

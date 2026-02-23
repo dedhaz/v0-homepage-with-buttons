@@ -40,6 +40,22 @@ export interface LoginResult {
   }
 }
 
+export interface LoginPayload {
+  email: string
+  password: string
+}
+
+export interface LoginResult {
+  ok: boolean
+  error?: string
+  user?: {
+    id: number
+    email: string
+    fullName: string
+    role: "user" | "admin"
+  }
+}
+
 async function parseJsonSafe<T>(response: Response): Promise<T | null> {
   try {
     return (await response.json()) as T

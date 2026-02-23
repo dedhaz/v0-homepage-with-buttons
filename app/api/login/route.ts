@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { verifyRegistrationCode } from "@/lib/server/auth-service"
+import { loginWithPassword } from "@/lib/server/auth-service"
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
@@ -9,13 +9,13 @@ export async function POST(request: Request) {
   }
 
   const email = typeof body.email === "string" ? body.email.trim() : ""
-  const code = typeof body.code === "string" ? body.code.trim() : ""
+  const password = typeof body.password === "string" ? body.password : ""
 
-  if (!email || !code) {
-    return NextResponse.json({ ok: false, error: "Укажите e-mail и код." }, { status: 400 })
+  if (!email || !password) {
+    return NextResponse.json({ ok: false, error: "Укажите e-mail и пароль." }, { status: 400 })
   }
 
-  const result = await verifyRegistrationCode({ email, code })
+  const result = await loginWithPassword({ email, password })
 
   if (!result.ok) {
     return NextResponse.json(result, { status: 400 })

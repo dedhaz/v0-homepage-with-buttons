@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { startRegistration } from "@/lib/server/auth-store"
+import { startRegistration } from "@/lib/server/auth-service"
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     )
   }
 
-  const result = startRegistration({ email, password, fullName })
+  const result = await startRegistration({ email, password, fullName })
 
   if (!result.ok) {
     return NextResponse.json(result, { status: 400 })

@@ -66,6 +66,8 @@ interface Client {
   kpp: string
   ogrn: string
   companyName: string
+  shortName?: string
+  fullName?: string
   bik: string
   bankName: string
   ks: string
@@ -96,6 +98,8 @@ const emptyClient: Omit<Client, "id" | "createdAt"> = {
   kpp: "",
   ogrn: "",
   companyName: "",
+  shortName: "",
+  fullName: "",
   bik: "",
   bankName: "",
   ks: "",
@@ -127,7 +131,7 @@ function toTitleCase(value: string) {
 }
 
 function shortCompanyName(client: Client) {
-  const name = (client.companyName || "").trim()
+  const name = (client.shortName || client.companyName || "").trim()
   if (!name) return ""
 
   const oooMatch = name.match(/(?:общество\s+с\s+ограниченной\s+ответственностью|ооо)\s*["«]?([^"»]+)["»]?/i)
@@ -281,7 +285,8 @@ export default function ClientsPage() {
       const q = search.toLowerCase()
       result = result.filter(
         (c) =>
-          c.companyName.toLowerCase().includes(q) ||
+          (c.shortName || c.companyName).toLowerCase().includes(q) ||
+          (c.fullName || "").toLowerCase().includes(q) ||
           c.inn.toLowerCase().includes(q) ||
           c.email.toLowerCase().includes(q) ||
           c.phone.toLowerCase().includes(q) ||
@@ -298,6 +303,7 @@ export default function ClientsPage() {
         let vb: string | number = ""
         if (sortKey === "id") { va = a.id; vb = b.id }
         else if (sortKey === "contracts") { va = a.contracts[0]?.number ?? ""; vb = b.contracts[0]?.number ?? "" }
+        else if (sortKey === "companyName") { va = a.shortName || a.companyName; vb = b.shortName || b.companyName }
         else { va = a[sortKey]; vb = b[sortKey] }
         if (typeof va === "number" && typeof vb === "number") return sortDir === "asc" ? va - vb : vb - va
         return sortDir === "asc" ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va))
@@ -316,7 +322,7 @@ export default function ClientsPage() {
   function openEdit(client: Client) {
     setEditingId(client.id)
     const { id: _id, createdAt: _ca, ...rest } = client
-    setForm({ ...rest, contracts: client.contracts.map((c) => ({ ...c })), address: { ...client.address } })
+    setForm({ ...rest, shortName: client.shortName || client.companyName || "", fullName: client.fullName || "", contracts: client.contracts.map((c) => ({ ...c })), address: { ...client.address } })
     setOpen(true)
   }
 
@@ -325,7 +331,7 @@ export default function ClientsPage() {
 
     try {
     if (editingId !== null) {
-      const payload = { ...form, contracts: form.contracts.map((ct) => ({ ...ct })), address: { ...form.address } }
+      const payload = { ...form, companyName: (form.shortName || form.companyName || "").trim(), shortName: (form.shortName || form.companyName || "").trim(), fullName: (form.fullName || "").trim(), contracts: form.contracts.map((ct) => ({ ...ct })), address: { ...form.address } }
       const response = await fetch(`/api/admin/clients/${editingId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -336,7 +342,7 @@ export default function ClientsPage() {
 
       setClients((prev) => prev.map((c) => (c.id === editingId ? { ...c, ...payload } : c)))
     } else {
-      const payload = { ...form, contracts: form.contracts.map((ct) => ({ ...ct })), address: { ...form.address } }
+      const payload = { ...form, companyName: (form.shortName || form.companyName || "").trim(), shortName: (form.shortName || form.companyName || "").trim(), fullName: (form.fullName || "").trim(), contracts: form.contracts.map((ct) => ({ ...ct })), address: { ...form.address } }
       const response = await fetch("/api/admin/clients", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -405,6 +411,8 @@ export default function ClientsPage() {
         ogrn?: string
         kpp?: string
         companyName?: string
+        shortName?: string
+        fullName?: string
         address?: Partial<ClientAddress>
       }
 
@@ -413,7 +421,9 @@ export default function ClientsPage() {
         type: company.type || prev.type,
         ogrn: company.ogrn || prev.ogrn,
         kpp: (company.type || prev.type) === "ООО" ? (company.kpp || prev.kpp) : "",
-        companyName: company.companyName || prev.companyName,
+        shortName: company.shortName || company.companyName || prev.shortName || prev.companyName,
+        fullName: company.fullName || prev.fullName,
+        companyName: company.shortName || company.companyName || prev.companyName,
         address: {
           ...prev.address,
           ...(company.address ?? {}),
@@ -549,7 +559,7 @@ export default function ClientsPage() {
                   >
                     <TableCell className="font-medium text-muted-foreground">{client.id}</TableCell>
                     <TableCell className="text-muted-foreground">{client.createdAt}</TableCell>
-                    <TableCell className="font-medium">{shortCompanyName(client)}</TableCell>
+                    <TableCell className="font-medium">{client.shortName || shortCompanyName(client)}</TableCell>
                     <TableCell className="text-sm">
                       {client.contracts.length === 0 ? "\u2014" : (
                         <div className="flex flex-col gap-0.5">
@@ -574,7 +584,7 @@ export default function ClientsPage() {
   <Pencil className="h-4 w-4" />
   </Button>
   <Button variant="ghost" size="icon" className="h-8 w-8" asChild onClick={(e) => e.stopPropagation()}>
-  <Link href={"/admin/deals/new?client=" + encodeURIComponent(client.companyName)} title="Создать сделку">
+  <Link href={"/admin/deals/new?client=" + encodeURIComponent(client.shortName || client.companyName)} title="Создать сделку">
   <FileText className="h-4 w-4" />
   </Link>
   </Button>
@@ -742,8 +752,12 @@ export default function ClientsPage() {
                   <Input value={form.ogrn} onChange={(e) => updateField("ogrn", e.target.value)} placeholder="1027700132195" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Название компании</Label>
-                  <Input value={form.companyName} onChange={(e) => updateField("companyName", e.target.value)} placeholder='ООО "Компания"' />
+                  <Label>Полное название</Label>
+                  <Input value={form.fullName || ""} onChange={(e) => updateField("fullName", e.target.value)} placeholder='ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ "КОМПАНИЯ"' />
+                </div>
+                <div className="space-y-2">
+                  <Label>Короткое название</Label>
+                  <Input value={form.shortName || form.companyName} onChange={(e) => { updateField("shortName", e.target.value); updateField("companyName", e.target.value) }} placeholder='ООО "Компания" / ИП Фамилия И.О.' />
                 </div>
               </div>
             </section>

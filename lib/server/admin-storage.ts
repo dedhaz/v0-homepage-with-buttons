@@ -45,6 +45,16 @@ function getTable(entity: AdminEntity) {
   return TABLES[entity]
 }
 
+function sanitizeRecordData(data: unknown) {
+  if (!data || typeof data !== "object") return {}
+  const payload = { ...(data as Record<string, unknown>) }
+  delete payload.id
+  delete payload.createdAt
+  delete payload.updatedAt
+  return payload
+}
+
+
 export async function listAdminRecords<T>(entity: AdminEntity): Promise<T[]> {
   await ensureAdminTables()
   const table = getTable(entity)
@@ -53,11 +63,14 @@ export async function listAdminRecords<T>(entity: AdminEntity): Promise<T[]> {
     `SELECT id, data_json as data, DATE_FORMAT(created_at, '%Y-%m-%d') as createdAt FROM ${table} ORDER BY id DESC`,
   )
 
-  return rows.map((row) => ({
-    id: row.id,
-    createdAt: row.createdAt,
-    ...(typeof row.data === "string" ? JSON.parse(row.data) : (row.data as object)),
-  })) as T[]
+  return rows.map((row) => {
+    const payload = sanitizeRecordData(typeof row.data === "string" ? JSON.parse(row.data) : row.data)
+    return {
+      ...payload,
+      id: row.id,
+      createdAt: row.createdAt,
+    }
+  }) as T[]
 }
 
 export async function createAdminRecord<T extends object>(entity: AdminEntity, data: T) {
@@ -65,7 +78,7 @@ export async function createAdminRecord<T extends object>(entity: AdminEntity, d
   const table = getTable(entity)
 
   const [result] = await pool.execute<ResultSetHeader>(`INSERT INTO ${table} (data_json) VALUES (?)`, [
-    JSON.stringify(data),
+    JSON.stringify(sanitizeRecordData(data)),
   ])
 
   return result.insertId
@@ -75,7 +88,7 @@ export async function updateAdminRecord<T extends object>(entity: AdminEntity, i
   await ensureAdminTables()
   const table = getTable(entity)
 
-  await pool.execute(`UPDATE ${table} SET data_json = ? WHERE id = ?`, [JSON.stringify(data), id])
+  await pool.execute(`UPDATE ${table} SET data_json = ? WHERE id = ?`, [JSON.stringify(sanitizeRecordData(data)), id])
 }
 
 export async function deleteAdminRecord(entity: AdminEntity, id: number) {

@@ -16,20 +16,27 @@ function initialsFromFio(fio: string) {
   return `${toTitleCase(lastName)} ${fi}${mi}`.trim()
 }
 
-function normalizeCompanyName(raw: string) {
+function buildShortName(raw: string) {
   const normalized = raw.replace(/\s+/g, " ").trim()
   if (!normalized) return ""
 
-  const ipMatch = normalized.match(/(?:индивидуальный\s+предприниматель|ип)\s+(.+)$/i)
-  if (ipMatch?.[1]) {
-    return `ИП ${initialsFromFio(ipMatch[1].replace(/["']/g, "").trim())}`
+  const oooMatch = normalized.match(/(?:общество\s+с\s+ограниченной\s+ответственностью|ооо)\s*["«]?([^"»]+)["»]?/i)
+  if (oooMatch?.[1]) {
+    return `ООО "${toTitleCase(oooMatch[1].trim())}"`
   }
+
+  const ipMatch = normalized.match(/(?:индивидуальный\s+предприниматель|ип)\s+(.+)$/i)
+  if (ipMatch?.[1]) return `ИП ${initialsFromFio(ipMatch[1].replace(/["']/g, "").trim())}`
 
   if (/^[А-ЯЁ\s]+$/.test(normalized) && normalized.split(/\s+/).length >= 2) {
     return `ИП ${initialsFromFio(normalized)}`
   }
 
   return normalized
+}
+
+function normalizeCompanyName(raw: string) {
+  return raw.replace(/\s+/g, " ").trim()
 }
 
 function parseAddress(addressRaw: string) {
@@ -128,6 +135,8 @@ export async function GET(request: Request) {
   }
 
   const rawName = row.n?.trim() || row.c?.trim() || ""
+  const fullName = normalizeCompanyName(rawName)
+  const shortName = buildShortName(fullName)
   const addressRaw = getAddressRaw(row)
   const type = detectType(inn, rawName)
 
@@ -137,7 +146,9 @@ export async function GET(request: Request) {
       type,
       ogrn: row.o?.trim() ?? "",
       kpp: type === "ООО" ? (row.p?.trim() || row.k?.trim() || pickString(row, ["kpp", "КПП"])) : "",
-      companyName: normalizeCompanyName(rawName),
+      fullName,
+      shortName,
+      companyName: shortName || fullName,
       addressRaw,
       address: parseAddress(addressRaw),
     },

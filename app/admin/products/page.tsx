@@ -20,7 +20,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { Plus, Pencil, Upload, X, FileText, ImageIcon, ArrowUpDown, ArrowUp, ArrowDown, Search } from "lucide-react"
+import { Plus, Pencil, Upload, X, FileText, ImageIcon, ArrowUpDown, ArrowUp, ArrowDown, Search, Trash2, Download, FileUp } from "lucide-react"
+import { useSearchParams } from "next/navigation"
 
 /* ========== types ========== */
 interface ProductDimensions {
@@ -99,13 +100,13 @@ const emptyProduct: Omit<Product, "id"> = {
 }
 
 /* ========== mock clients / suppliers for autocomplete ========== */
-const clientCompanies = [
+const defaultClientCompanies = [
   'ООО "Техно-Импорт"',
   "ИП Козлова А.М.",
   'ООО "ГлобалТрейд"',
 ]
 
-const supplierCompanies = [
+const defaultSupplierCompanies = [
   "Шэньчжэнь Хуацян Электроникс",
   "Гуанчжоу Байда Трейдинг",
   "Иу Цзиньчэн Импорт Экспорт",
@@ -187,20 +188,43 @@ type Currency = "CNY" | "USD" | "RUB"
 const CURRENCY_LABELS: Record<Currency, string> = { CNY: "\u00A5", USD: "$", RUB: "\u20BD" }
 
 function calcVolumeCm(d: ProductDimensions): string {
-  const l = parseFloat(d.length)
-  const w = parseFloat(d.width)
-  const h = parseFloat(d.height)
+  const l = parseFloat(d.length.replace(",", "."))
+  const w = parseFloat(d.width.replace(",", "."))
+  const h = parseFloat(d.height.replace(",", "."))
   if (isNaN(l) || isNaN(w) || isNaN(h) || l === 0 || w === 0 || h === 0) return "\u2014"
   const m3 = (l * w * h) / 1_000_000
   return m3.toFixed(6) + " m\u00B3"
 }
 
 function convertToRub(price: string, currency: Currency, rates: { usd: number; cny: number }): string {
-  const v = parseFloat(price)
+  const v = parseFloat(price.replace(",", "."))
   if (isNaN(v) || v === 0) return "\u2014"
   if (currency === "RUB") return v.toFixed(2) + " \u20BD"
   if (currency === "USD") return (v * rates.usd).toFixed(2) + " \u20BD"
   return (v * rates.cny).toFixed(2) + " \u20BD"
+}
+
+function normalizeDecimalInput(value: string) {
+  const sanitized = value.replace(/\s+/g, "").replace(/[.]/g, ",").replace(/[^\d,]/g, "")
+  if (sanitized === "") return ""
+  if (sanitized === ",") return "0,"
+  if (sanitized.startsWith(",")) return `0${sanitized}`
+  const firstComma = sanitized.indexOf(",")
+  if (firstComma === -1) return sanitized
+  return `${sanitized.slice(0, firstComma + 1)}${sanitized.slice(firstComma + 1).replace(/,/g, "")}`
+}
+
+function formatTnvedInput(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 10)
+  const groups = [4, 2, 3, 1]
+  let index = 0
+  const parts: string[] = []
+  for (const group of groups) {
+    if (index >= digits.length) break
+    parts.push(digits.slice(index, index + group))
+    index += group
+  }
+  return parts.join(" ")
 }
 
 /* ========== autocomplete component ========== */
@@ -253,6 +277,9 @@ function AutocompleteInput({
 /* ========== main component ========== */
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>(seedProducts)
+  const [clientCompanies, setClientCompanies] = useState<string[]>(defaultClientCompanies)
+  const [supplierCompanies, setSupplierCompanies] = useState<string[]>(defaultSupplierCompanies)
+  const [isSaving, setIsSaving] = useState(false)
   const [open, setOpen] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState<Omit<Product, "id">>({
@@ -265,12 +292,17 @@ export default function ProductsPage() {
 
   const photoInputRef = useRef<HTMLInputElement>(null)
   const docInputRef = useRef<HTMLInputElement>(null)
+  const importInputRef = useRef<HTMLInputElement>(null)
 
   /* search & filters */
   const [search, setSearch] = useState("")
   const [filterOwner, setFilterOwner] = useState("")
   const [filterManufacturer, setFilterManufacturer] = useState("")
   const [filterTnved, setFilterTnved] = useState("")
+
+  const searchParams = useSearchParams()
+  const focusId = Number(searchParams.get("focus") || 0)
+  const editIdFromQuery = Number(searchParams.get("edit") || 0)
 
   /* sorting */
   type SortKey = "id" | "article" | "nameRu" | "tnved" | "owner" | "priceSupplier" | "priceSale" | "barcode"
@@ -327,6 +359,8 @@ export default function ProductsPage() {
       result = result.filter((p) => p.tnved.toLowerCase().includes(q))
     }
 
+    if (focusId > 0) result = result.filter((p) => p.id === focusId)
+
     // sorting
     if (sortKey && sortDir) {
       result.sort((a, b) => {
@@ -342,7 +376,7 @@ export default function ProductsPage() {
     }
 
     return result
-  }, [products, search, filterOwner, filterManufacturer, filterTnved, sortKey, sortDir])
+  }, [products, search, filterOwner, filterManufacturer, filterTnved, sortKey, sortDir, focusId])
 
   /* CBR exchange rates */
   const [rates, setRates] = useState({ usd: 88.50, cny: 12.20 })
@@ -357,6 +391,259 @@ export default function ProductsPage() {
       })
       .catch(() => { /* keep default rates */ })
   }, [])
+
+  useEffect(() => {
+    fetch("/api/admin/products")
+      .then((response) => response.json())
+      .then((result) => {
+        if (result?.ok && Array.isArray(result.items)) {
+          setProducts(result.items)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    fetch("/api/admin/clients")
+      .then((response) => response.json())
+      .then((result) => {
+        if (result?.ok && Array.isArray(result.items)) {
+          const options = result.items.map((item: { companyName?: string }) => item.companyName).filter(Boolean)
+          if (options.length > 0) setClientCompanies(options)
+        }
+      })
+      .catch(() => {})
+
+    fetch("/api/admin/suppliers")
+      .then((response) => response.json())
+      .then((result) => {
+        if (result?.ok && Array.isArray(result.items)) {
+          const options = result.items
+            .flatMap((item: { nameRu?: string; nameEn?: string; nameZh?: string }) => [item.nameRu, item.nameEn, item.nameZh])
+            .filter((value: string | undefined): value is string => Boolean(value && value.trim()))
+          if (options.length > 0) setSupplierCompanies(options)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  function nextCopyArticle(article: string) {
+    const base = article.replace(/\s*\(\d+\)\s*$/, "").trim()
+    let index = 1
+    const existing = new Set(products.map((p) => p.article.trim()))
+    let candidate = `${base} (${index})`
+    while (existing.has(candidate)) {
+      index += 1
+      candidate = `${base} (${index})`
+    }
+    return candidate
+  }
+
+  async function copyProduct(product: Product) {
+    const payload: Omit<Product, "id"> = {
+      ...product,
+      article: nextCopyArticle(product.article),
+      dimUnit: { ...product.dimUnit },
+      dimPackage: { ...product.dimPackage },
+      photos: [...product.photos],
+      documents: [...product.documents],
+    }
+
+    const response = await fetch("/api/admin/products", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+    const result = await response.json().catch(() => null)
+    if (!response.ok || !result?.id) {
+      alert("Не удалось скопировать товар")
+      return
+    }
+
+    setProducts((prev) => [{ id: result.id, ...payload }, ...prev])
+  }
+
+  async function exportProductsToExcel(source: Product[]) {
+    const ExcelJS = (await import("exceljs")).default
+    const workbook = new ExcelJS.Workbook()
+    const sheet = workbook.addWorksheet("Товары")
+    sheet.columns = [
+      { header: "ID", key: "id", width: 10 },
+      { header: "Владелец", key: "owner", width: 28 },
+      { header: "Производитель", key: "manufacturer", width: 28 },
+      { header: "Артикул", key: "article", width: 20 },
+      { header: "ШК", key: "barcode", width: 20 },
+      { header: "ТНВЭД", key: "tnved", width: 16 },
+      { header: "Русское название", key: "nameRu", width: 40 },
+      { header: "Цена поставщика", key: "priceSupplier", width: 18 },
+      { header: "Валюта поставщика", key: "currencySupplier", width: 18 },
+      { header: "Цена продажи", key: "priceSale", width: 18 },
+      { header: "Валюта продажи", key: "currencySale", width: 18 },
+      { header: "Название CN", key: "nameZh", width: 26 },
+      { header: "Название EN", key: "nameEn", width: 26 },
+      { header: "Состав", key: "composition", width: 40 },
+      { header: "Длина 1 шт", key: "dimUnitLength", width: 12 },
+      { header: "Ширина 1 шт", key: "dimUnitWidth", width: 12 },
+      { header: "Высота 1 шт", key: "dimUnitHeight", width: 12 },
+      { header: "Вес нетто 1 шт", key: "weightNettoUnit", width: 14 },
+      { header: "Вес брутто 1 шт", key: "weightBruttoUnit", width: 14 },
+      { header: "Длина упак", key: "dimPackageLength", width: 12 },
+      { header: "Ширина упак", key: "dimPackageWidth", width: 12 },
+      { header: "Высота упак", key: "dimPackageHeight", width: 12 },
+      { header: "Вес нетто упак", key: "weightNettoPackage", width: 14 },
+      { header: "Вес брутто упак", key: "weightBruttoPackage", width: 14 },
+      { header: "Кол-во в упак", key: "qtyInPackage", width: 12 },
+      { header: "Пошлина %", key: "dutyPercent", width: 12 },
+      { header: "НДС %", key: "vatPercent", width: 10 },
+      { header: "Акциз", key: "excise", width: 12 },
+      { header: "Антидемпинг", key: "antiDumping", width: 14 },
+      { header: "Тип разрешения", key: "permitDocType", width: 18 },
+      { header: "Номер разрешения", key: "permitDocNumber", width: 22 },
+      { header: "Дата разрешения", key: "permitDocDate", width: 16 },
+      { header: "Файл разрешения", key: "permitDocFile", width: 24 },
+      { header: "Фото (через ;) ", key: "photos", width: 36 },
+      { header: "Документы JSON", key: "documents", width: 40 },
+    ]
+
+    source.forEach((p) => {
+      sheet.addRow({
+        id: p.id,
+        owner: p.owner,
+        manufacturer: p.manufacturer,
+        article: p.article,
+        barcode: p.barcode,
+        tnved: p.tnved,
+        nameRu: p.nameRu,
+        priceSupplier: p.priceSupplier,
+        currencySupplier: p.currencySupplier,
+        priceSale: p.priceSale,
+        currencySale: p.currencySale,
+        nameZh: p.nameZh,
+        nameEn: p.nameEn,
+        composition: p.composition,
+        dimUnitLength: p.dimUnit.length,
+        dimUnitWidth: p.dimUnit.width,
+        dimUnitHeight: p.dimUnit.height,
+        weightNettoUnit: p.weightNettoUnit,
+        weightBruttoUnit: p.weightBruttoUnit,
+        dimPackageLength: p.dimPackage.length,
+        dimPackageWidth: p.dimPackage.width,
+        dimPackageHeight: p.dimPackage.height,
+        weightNettoPackage: p.weightNettoPackage,
+        weightBruttoPackage: p.weightBruttoPackage,
+        qtyInPackage: p.qtyInPackage,
+        dutyPercent: p.dutyPercent,
+        vatPercent: p.vatPercent,
+        excise: p.excise,
+        antiDumping: p.antiDumping,
+        permitDocType: p.permitDocType,
+        permitDocNumber: p.permitDocNumber,
+        permitDocDate: p.permitDocDate,
+        permitDocFile: p.permitDocFile,
+        photos: p.photos.join(";"),
+        documents: JSON.stringify(p.documents),
+      })
+    })
+
+    const buffer = await workbook.xlsx.writeBuffer()
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "products.xlsx"
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function downloadTemplate() {
+    await exportProductsToExcel([])
+  }
+
+  async function handleImportExcel(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const ExcelJS = (await import("exceljs")).default
+    const workbook = new ExcelJS.Workbook()
+    const arrayBuffer = await file.arrayBuffer()
+    await workbook.xlsx.load(arrayBuffer)
+    const sheet = workbook.worksheets[0]
+    if (!sheet) return
+
+    const imported: Omit<Product, "id">[] = []
+    sheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return
+      const owner = String(row.getCell(2).value ?? "").trim()
+      const manufacturer = String(row.getCell(3).value ?? "").trim()
+      const article = String(row.getCell(4).value ?? "").trim()
+      if (!owner && !manufacturer && !article) return
+
+      imported.push({
+        ...emptyProduct,
+        owner,
+        manufacturer,
+        article,
+        barcode: String(row.getCell(5).value ?? "").trim(),
+        tnved: formatTnvedInput(String(row.getCell(6).value ?? "")),
+        nameRu: String(row.getCell(7).value ?? "").trim(),
+        priceSupplier: normalizeDecimalInput(String(row.getCell(8).value ?? "")),
+        currencySupplier: (String(row.getCell(9).value ?? "CNY").trim() as Currency) || "CNY",
+        priceSale: normalizeDecimalInput(String(row.getCell(10).value ?? "")),
+        currencySale: (String(row.getCell(11).value ?? "CNY").trim() as Currency) || "CNY",
+        nameZh: String(row.getCell(12).value ?? "").trim(),
+        nameEn: String(row.getCell(13).value ?? "").trim(),
+        composition: String(row.getCell(14).value ?? "").trim(),
+        dimUnit: {
+          length: normalizeDecimalInput(String(row.getCell(15).value ?? "")),
+          width: normalizeDecimalInput(String(row.getCell(16).value ?? "")),
+          height: normalizeDecimalInput(String(row.getCell(17).value ?? "")),
+        },
+        weightNettoUnit: normalizeDecimalInput(String(row.getCell(18).value ?? "")),
+        weightBruttoUnit: normalizeDecimalInput(String(row.getCell(19).value ?? "")),
+        dimPackage: {
+          length: normalizeDecimalInput(String(row.getCell(20).value ?? "")),
+          width: normalizeDecimalInput(String(row.getCell(21).value ?? "")),
+          height: normalizeDecimalInput(String(row.getCell(22).value ?? "")),
+        },
+        weightNettoPackage: normalizeDecimalInput(String(row.getCell(23).value ?? "")),
+        weightBruttoPackage: normalizeDecimalInput(String(row.getCell(24).value ?? "")),
+        qtyInPackage: String(row.getCell(25).value ?? "").trim(),
+        dutyPercent: normalizeDecimalInput(String(row.getCell(26).value ?? "")),
+        vatPercent: (["0", "10", "22"].includes(String(row.getCell(27).value ?? "")) ? String(row.getCell(27).value) : "22") as Product["vatPercent"],
+        excise: normalizeDecimalInput(String(row.getCell(28).value ?? "")),
+        antiDumping: normalizeDecimalInput(String(row.getCell(29).value ?? "")),
+        permitDocType: String(row.getCell(30).value ?? "") as Product["permitDocType"],
+        permitDocNumber: String(row.getCell(31).value ?? "").trim(),
+        permitDocDate: String(row.getCell(32).value ?? "").trim(),
+        permitDocFile: String(row.getCell(33).value ?? "").trim(),
+        photos: String(row.getCell(34).value ?? "").split(";").map((x) => x.trim()).filter(Boolean),
+        documents: (() => {
+          const raw = String(row.getCell(35).value ?? "").trim()
+          if (!raw) return []
+          try {
+            const parsed = JSON.parse(raw)
+            return Array.isArray(parsed) ? parsed : []
+          } catch {
+            return []
+          }
+        })(),
+      })
+    })
+
+    for (const payload of imported) {
+      const response = await fetch("/api/admin/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      const result = await response.json().catch(() => null)
+      if (response.ok && result?.id) {
+        setProducts((prev) => [{ id: result.id, ...payload }, ...prev])
+      }
+    }
+
+    e.target.value = ""
+  }
 
   /* computed volumes */
   const volumeUnit = useMemo(() => calcVolumeCm(form.dimUnit), [form.dimUnit])
@@ -387,37 +674,66 @@ export default function ProductsPage() {
     setOpen(true)
   }
 
-  function handleSave() {
-    if (editingId !== null) {
-      setProducts((prev) =>
-        prev.map((p) =>
-          p.id === editingId
-            ? {
-                ...p,
-                ...form,
-                dimUnit: { ...form.dimUnit },
-                dimPackage: { ...form.dimPackage },
-                photos: [...form.photos],
-                documents: [...form.documents],
-              }
-            : p
-        )
-      )
-    } else {
-      const newId = products.length > 0 ? Math.max(...products.map((p) => p.id)) + 1 : 1
-      setProducts((prev) => [
-        ...prev,
-        {
-          id: newId,
-          ...form,
-          dimUnit: { ...form.dimUnit },
-          dimPackage: { ...form.dimPackage },
-          photos: [...form.photos],
-          documents: [...form.documents],
-        },
-      ])
+
+  useEffect(() => {
+    if (!editIdFromQuery) return
+    const target = products.find((product) => product.id === editIdFromQuery)
+    if (target) openEdit(target)
+  }, [products, editIdFromQuery])
+
+  async function handleSave() {
+    setIsSaving(true)
+
+    try {
+      const payload = {
+        ...form,
+        dimUnit: { ...form.dimUnit },
+        dimPackage: { ...form.dimPackage },
+        photos: [...form.photos],
+        documents: [...form.documents],
+      }
+
+      if (editingId !== null) {
+        const response = await fetch(`/api/admin/products/${editingId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+
+        if (!response.ok) throw new Error("save failed")
+
+        setProducts((prev) => prev.map((item) => (item.id === editingId ? { ...item, ...payload } : item)))
+      } else {
+        const response = await fetch("/api/admin/products", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+        const result = await response.json().catch(() => null)
+
+        if (!response.ok || !result?.id) throw new Error("create failed")
+
+        setProducts((prev) => [{ id: result.id, ...payload }, ...prev])
+      }
+
+      setOpen(false)
+    } catch {
+      alert("Не удалось сохранить товар")
+    } finally {
+      setIsSaving(false)
     }
-    setOpen(false)
+  }
+
+  async function handleDelete(productId: number) {
+    if (!confirm("Удалить товар?")) return
+
+    const response = await fetch(`/api/admin/products/${productId}`, { method: "DELETE" })
+    if (!response.ok) {
+      alert("Не удалось удалить товар")
+      return
+    }
+
+    setProducts((prev) => prev.filter((item) => item.id !== productId))
   }
 
   function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -461,10 +777,31 @@ export default function ProductsPage() {
           <h1 className="font-display text-2xl font-bold text-foreground">Товары</h1>
           <p className="text-sm text-muted-foreground">{"Каталог товаров клиентов \u00B7 " + displayProducts.length + " из " + products.length}</p>
         </div>
-        <Button onClick={openNew} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Добавить товар
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" onClick={() => importInputRef.current?.click()} className="gap-2">
+            <FileUp className="h-4 w-4" />
+            Загрузить файл
+          </Button>
+          <Button variant="outline" onClick={downloadTemplate} className="gap-2">
+            <Download className="h-4 w-4" />
+            Скачать шаблон
+          </Button>
+          <Button variant="outline" onClick={() => exportProductsToExcel(displayProducts)} className="gap-2">
+            <Download className="h-4 w-4" />
+            Скачать все в Excel
+          </Button>
+          <Button onClick={openNew} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Добавить товар
+          </Button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            onChange={handleImportExcel}
+          />
+        </div>
       </div>
 
       {/* filters */}
@@ -578,17 +915,42 @@ export default function ProductsPage() {
                   <TableCell className="text-right">{p.priceSale} {CURRENCY_LABELS[p.currencySale]}</TableCell>
                   <TableCell className="font-mono text-xs">{p.barcode}</TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        openEdit(p)
-                      }}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          copyProduct(p)
+                        }}
+                        title="Скопировать"
+                      >
+                        <FileText className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          openEdit(p)
+                        }}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDelete(p.id)
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
@@ -679,7 +1041,7 @@ export default function ProductsPage() {
                   <Label>Код ТНВЭД</Label>
                   <Input
                     value={form.tnved}
-                    onChange={(e) => setForm({ ...form, tnved: e.target.value })}
+                    onChange={(e) => setForm({ ...form, tnved: formatTnvedInput(e.target.value) })}
                     placeholder="9405 42 310 0"
                   />
                 </div>
@@ -746,10 +1108,9 @@ export default function ProductsPage() {
                   <Label>Цена поставщика</Label>
                   <div className="flex gap-2">
                     <Input
-                      type="number"
                       step="0.01"
                       value={form.priceSupplier}
-                      onChange={(e) => setForm({ ...form, priceSupplier: e.target.value })}
+                      onChange={(e) => setForm({ ...form, priceSupplier: normalizeDecimalInput(e.target.value) })}
                       placeholder="90"
                       className="flex-1"
                     />
@@ -774,10 +1135,9 @@ export default function ProductsPage() {
                   <Label>Цена продажи</Label>
                   <div className="flex gap-2">
                     <Input
-                      type="number"
                       step="0.01"
                       value={form.priceSale}
-                      onChange={(e) => setForm({ ...form, priceSale: e.target.value })}
+                      onChange={(e) => setForm({ ...form, priceSale: normalizeDecimalInput(e.target.value) })}
                       placeholder="24.00"
                       className="flex-1"
                     />
@@ -809,10 +1169,9 @@ export default function ProductsPage() {
                 <div className="space-y-2">
                   <Label>{"Длина, см"}</Label>
                   <Input
-                    type="number"
                     value={form.dimUnit.length}
                     onChange={(e) =>
-                      setForm({ ...form, dimUnit: { ...form.dimUnit, length: e.target.value } })
+                      setForm({ ...form, dimUnit: { ...form.dimUnit, length: normalizeDecimalInput(e.target.value) } })
                     }
                     placeholder="60"
                   />
@@ -820,10 +1179,9 @@ export default function ProductsPage() {
                 <div className="space-y-2">
                   <Label>{"Ширина, см"}</Label>
                   <Input
-                    type="number"
                     value={form.dimUnit.width}
                     onChange={(e) =>
-                      setForm({ ...form, dimUnit: { ...form.dimUnit, width: e.target.value } })
+                      setForm({ ...form, dimUnit: { ...form.dimUnit, width: normalizeDecimalInput(e.target.value) } })
                     }
                     placeholder="60"
                   />
@@ -831,10 +1189,9 @@ export default function ProductsPage() {
                 <div className="space-y-2">
                   <Label>{"Высота, см"}</Label>
                   <Input
-                    type="number"
                     value={form.dimUnit.height}
                     onChange={(e) =>
-                      setForm({ ...form, dimUnit: { ...form.dimUnit, height: e.target.value } })
+                      setForm({ ...form, dimUnit: { ...form.dimUnit, height: normalizeDecimalInput(e.target.value) } })
                     }
                     placeholder="1.2"
                   />
@@ -844,20 +1201,18 @@ export default function ProductsPage() {
                 <div className="space-y-2">
                   <Label>Вес нетто 1 шт.</Label>
                   <Input
-                    type="number"
                     step="0.01"
                     value={form.weightNettoUnit}
-                    onChange={(e) => setForm({ ...form, weightNettoUnit: e.target.value })}
+                    onChange={(e) => setForm({ ...form, weightNettoUnit: normalizeDecimalInput(e.target.value) })}
                     placeholder="2.8"
                   />
                 </div>
                 <div className="space-y-2">
                   <Label>Вес брутто 1 шт.</Label>
                   <Input
-                    type="number"
                     step="0.01"
                     value={form.weightBruttoUnit}
-                    onChange={(e) => setForm({ ...form, weightBruttoUnit: e.target.value })}
+                    onChange={(e) => setForm({ ...form, weightBruttoUnit: normalizeDecimalInput(e.target.value) })}
                     placeholder="3.2"
                   />
                 </div>
@@ -877,10 +1232,9 @@ export default function ProductsPage() {
                 <div className="space-y-2">
                   <Label>{"Длина, см"}</Label>
                   <Input
-                    type="number"
                     value={form.dimPackage.length}
                     onChange={(e) =>
-                      setForm({ ...form, dimPackage: { ...form.dimPackage, length: e.target.value } })
+                      setForm({ ...form, dimPackage: { ...form.dimPackage, length: normalizeDecimalInput(e.target.value) } })
                     }
                     placeholder="65"
                   />
@@ -888,10 +1242,9 @@ export default function ProductsPage() {
                 <div className="space-y-2">
                   <Label>{"Ширина, см"}</Label>
                   <Input
-                    type="number"
                     value={form.dimPackage.width}
                     onChange={(e) =>
-                      setForm({ ...form, dimPackage: { ...form.dimPackage, width: e.target.value } })
+                      setForm({ ...form, dimPackage: { ...form.dimPackage, width: normalizeDecimalInput(e.target.value) } })
                     }
                     placeholder="65"
                   />
@@ -899,10 +1252,9 @@ export default function ProductsPage() {
                 <div className="space-y-2">
                   <Label>{"Высота, см"}</Label>
                   <Input
-                    type="number"
                     value={form.dimPackage.height}
                     onChange={(e) =>
-                      setForm({ ...form, dimPackage: { ...form.dimPackage, height: e.target.value } })
+                      setForm({ ...form, dimPackage: { ...form.dimPackage, height: normalizeDecimalInput(e.target.value) } })
                     }
                     placeholder="28"
                   />
@@ -912,20 +1264,18 @@ export default function ProductsPage() {
                 <div className="space-y-2">
                   <Label>Вес нетто упаковки</Label>
                   <Input
-                    type="number"
                     step="0.01"
                     value={form.weightNettoPackage}
-                    onChange={(e) => setForm({ ...form, weightNettoPackage: e.target.value })}
+                    onChange={(e) => setForm({ ...form, weightNettoPackage: normalizeDecimalInput(e.target.value) })}
                     placeholder="14.0"
                   />
                 </div>
                 <div className="space-y-2">
                   <Label>Вес брутто упаковки</Label>
                   <Input
-                    type="number"
                     step="0.01"
                     value={form.weightBruttoPackage}
-                    onChange={(e) => setForm({ ...form, weightBruttoPackage: e.target.value })}
+                    onChange={(e) => setForm({ ...form, weightBruttoPackage: normalizeDecimalInput(e.target.value) })}
                     placeholder="16.5"
                   />
                 </div>
@@ -1120,8 +1470,8 @@ export default function ProductsPage() {
 
             {/* actions */}
             <div className="flex gap-3 border-t border-border pt-6">
-              <Button onClick={handleSave} className="flex-1">
-                {editingId !== null ? "Сохранит��" : "Добавить товар"}
+              <Button onClick={handleSave} className="flex-1" disabled={isSaving}>
+                {isSaving ? "Сохраняем..." : editingId !== null ? "Сохранить" : "Добавить товар"}
               </Button>
               <Button variant="outline" onClick={() => setOpen(false)} className="flex-1">
                 Отмена

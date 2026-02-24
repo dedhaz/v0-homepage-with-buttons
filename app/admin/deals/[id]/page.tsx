@@ -24,50 +24,39 @@ import { CURRENCY_SYMBOLS, permitDocLabels } from "@/lib/deal-types"
 import { calcDeal, fmtNum, toRub } from "@/lib/deal-calc"
 import { exportDealToExcel } from "@/lib/deal-export"
 
-/* ===== mock catalogues ===== */
-const clientList = ['ООО "Техно-Импорт"', "ИП Козлова А.М.", 'ООО "ГлобалТрейд"']
-const supplierList = [
-  "Шэньчжэнь Хуацян Электроникс",
-  "Гуанчжоу Байда Трейдинг",
-  "Иу Цзиньчэн Импорт Экспорт",
-]
-
-interface CatalogProduct {
+interface ClientOption { companyName?: string }
+interface SupplierOption { nameRu?: string; nameEn?: string; nameZh?: string }
+interface ProductOption {
   id: number
-  article: string
-  nameRu: string
-  tnved: string
-  photo: string
-  priceSale: number
-  priceCurrency: Currency
-  dutyPercent: number
-  vatPercent: number
-  excise: number
-  antiDumping: number
-  dimUnitL: number; dimUnitW: number; dimUnitH: number
-  weightBruttoUnit: number
-  dimPackageL: number; dimPackageW: number; dimPackageH: number
-  weightBruttoPackage: number
-  qtyInPackage: number
+  article?: string
+  nameRu?: string
+  photo?: string
+  tnved?: string
+  priceSale?: string | number
+  currencySale?: Currency
+  dutyPercent?: string | number
+  vatPercent?: string | number
+  excise?: string | number
+  antiDumping?: string | number
+  dimUnit?: { length?: string; width?: string; height?: string }
+  weightBruttoUnit?: string | number
+  dimPackage?: { length?: string; width?: string; height?: string }
+  weightBruttoPackage?: string | number
+  qtyInPackage?: string | number
 }
-
-const catalogProducts: CatalogProduct[] = [
-  {
-    id: 1, article: "LED-6060-W", nameRu: "Светодиодная панель 60x60", tnved: "9405 42 310 0",
-    photo: "", priceSale: 24, priceCurrency: "USD", dutyPercent: 6, vatPercent: 22, excise: 0, antiDumping: 0,
-    dimUnitL: 60, dimUnitW: 60, dimUnitH: 1.2, weightBruttoUnit: 3.2,
-    dimPackageL: 65, dimPackageW: 65, dimPackageH: 28, weightBruttoPackage: 16.5, qtyInPackage: 5,
-  },
-  {
-    id: 2, article: "CTN-PREM-001", nameRu: "Хлопковая ткань Premium", tnved: "5208 11 100 0",
-    photo: "", priceSale: 145, priceCurrency: "USD", dutyPercent: 8, vatPercent: 22, excise: 0, antiDumping: 0,
-    dimUnitL: 150, dimUnitW: 30, dimUnitH: 30, weightBruttoUnit: 13,
-    dimPackageL: 155, dimPackageW: 35, dimPackageH: 35, weightBruttoPackage: 14.5, qtyInPackage: 1,
-  },
-]
 
 /* ===== helpers ===== */
 function genTempId() { return Math.random().toString(36).slice(2, 10) }
+
+function parseNumberish(value: unknown) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0
+  if (typeof value === "string") {
+    const normalized = value.replace(/\s+/g, "").replace(",", ".")
+    const parsed = Number(normalized)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  return 0
+}
 
 function emptyDealItem(): DealItem {
   return {
@@ -79,16 +68,31 @@ function emptyDealItem(): DealItem {
   }
 }
 
-function itemFromCatalog(cp: CatalogProduct): DealItem {
+function itemFromProduct(cp: ProductOption): DealItem {
   return {
-    tempId: genTempId(), productId: cp.id, article: cp.article, nameRu: cp.nameRu,
-    photo: cp.photo, tnved: cp.tnved, description: "",
-    priceSale: cp.priceSale, priceCurrency: cp.priceCurrency, quantity: 1,
-    dutyPercent: cp.dutyPercent, vatPercent: cp.vatPercent, excise: cp.excise, antiDumping: cp.antiDumping,
-    dimUnitL: cp.dimUnitL, dimUnitW: cp.dimUnitW, dimUnitH: cp.dimUnitH,
-    weightBruttoUnit: cp.weightBruttoUnit,
-    dimPackageL: cp.dimPackageL, dimPackageW: cp.dimPackageW, dimPackageH: cp.dimPackageH,
-    weightBruttoPackage: cp.weightBruttoPackage, qtyInPackage: cp.qtyInPackage,
+    tempId: genTempId(),
+    productId: cp.id,
+    article: cp.article || "",
+    nameRu: cp.nameRu || "",
+    photo: cp.photo || "",
+    tnved: cp.tnved || "",
+    description: "",
+    priceSale: parseNumberish(cp.priceSale),
+    priceCurrency: cp.currencySale || "CNY",
+    quantity: 1,
+    dutyPercent: parseNumberish(cp.dutyPercent),
+    vatPercent: parseNumberish(cp.vatPercent) || 22,
+    excise: parseNumberish(cp.excise),
+    antiDumping: parseNumberish(cp.antiDumping),
+    dimUnitL: parseNumberish(cp.dimUnit?.length),
+    dimUnitW: parseNumberish(cp.dimUnit?.width),
+    dimUnitH: parseNumberish(cp.dimUnit?.height),
+    weightBruttoUnit: parseNumberish(cp.weightBruttoUnit),
+    dimPackageL: parseNumberish(cp.dimPackage?.length),
+    dimPackageW: parseNumberish(cp.dimPackage?.width),
+    dimPackageH: parseNumberish(cp.dimPackage?.height),
+    weightBruttoPackage: parseNumberish(cp.weightBruttoPackage),
+    qtyInPackage: parseNumberish(cp.qtyInPackage),
   }
 }
 
@@ -167,18 +171,8 @@ function DealFormPage() {
   const [cbUsd, setCbUsd] = useState(88.5)
   const [cbCny, setCbCny] = useState(12.2)
 
-  useEffect(() => {
-    fetch("https://www.cbr-xml-daily.ru/daily_json.js")
-      .then((r) => r.json())
-      .then((data) => {
-        setCbUsd(data?.Valute?.USD?.Value ?? 88.5)
-        setCbCny(data?.Valute?.CNY?.Value ?? 12.2)
-      })
-      .catch(() => {})
-  }, [])
-
   /* --- main form state --- */
-  const [dealNumber, setDealNumber] = useState(isNew ? "" : "КП-2026/001")
+  const [dealNumber, setDealNumber] = useState(isNew ? "" : "")
   const [clientName, setClientName] = useState(clientFromUrl)
   const [supplierName, setSupplierName] = useState("")
   const [cityFrom, setCityFrom] = useState("")
@@ -204,10 +198,17 @@ function DealFormPage() {
   const [commissionImporterUsd, setCommissionImporterUsd] = useState("")
   const [swiftUsd, setSwiftUsd] = useState("")
   const [notes, setNotes] = useState("")
+  const [status, setStatus] = useState<"draft" | "sent" | "approved" | "rejected">("draft")
+  const [clientOptions, setClientOptions] = useState<string[]>([])
+  const [supplierOptions, setSupplierOptions] = useState<string[]>([])
+  const [catalogProducts, setCatalogProducts] = useState<ProductOption[]>([])
+  const [isSaving, setIsSaving] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
 
   /* --- item add sheet --- */
   const [addSheetOpen, setAddSheetOpen] = useState(false)
   const [addMode, setAddMode] = useState<"catalog" | "manual">("catalog")
+  const [quickProductQuery, setQuickProductQuery] = useState("")
 
   /* --- expand sections --- */
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
@@ -215,12 +216,162 @@ function DealFormPage() {
   })
   const toggle = (s: string) => setExpandedSections((prev) => ({ ...prev, [s]: !prev[s] }))
 
+  useEffect(() => {
+    fetch("https://www.cbr-xml-daily.ru/daily_json.js")
+      .then((r) => r.json())
+      .then((data) => {
+        setCbUsd(data?.Valute?.USD?.Value ?? 88.5)
+        setCbCny(data?.Valute?.CNY?.Value ?? 12.2)
+      })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    setIsLoading(true)
+    Promise.all([
+      fetch("/api/admin/clients").then((r) => r.json()).catch(() => null),
+      fetch("/api/admin/suppliers").then((r) => r.json()).catch(() => null),
+      fetch("/api/admin/products").then((r) => r.json()).catch(() => null),
+    ]).then(([clientsRes, suppliersRes, productsRes]) => {
+      if (clientsRes?.ok && Array.isArray(clientsRes.items)) {
+        setClientOptions(clientsRes.items.map((item: ClientOption & { internalName?: string }) => item.companyName || item.internalName || "").filter(Boolean))
+      }
+      if (suppliersRes?.ok && Array.isArray(suppliersRes.items)) {
+        setSupplierOptions(
+          suppliersRes.items
+            .flatMap((item: SupplierOption) => [item.nameRu, item.nameEn, item.nameZh])
+            .filter((name: string | undefined): name is string => Boolean(name))
+        )
+      }
+      if (productsRes?.ok && Array.isArray(productsRes.items)) {
+        setCatalogProducts(productsRes.items)
+      }
+    }).finally(() => setIsLoading(false))
+  }, [])
+
+  useEffect(() => {
+    if (isNew) return
+    setIsLoading(true)
+    fetch(`/api/admin/deals/${params.id}`)
+      .then((response) => response.json())
+      .then((result) => {
+        if (!result?.ok || !result.item) return
+        const deal = result.item
+        setDealNumber(deal.number || "")
+        setClientName(deal.clientName || "")
+        setSupplierName(deal.supplierName || "")
+        setCityFrom(deal.cityFrom || "")
+        setCityTo(deal.cityTo || "")
+        setItems(Array.isArray(deal.items) ? deal.items : [])
+        setStatus(deal.status || "draft")
+        setDeliveryMethod(deal.deliveryMethod || "auto")
+        setDeliveryCostTotal(String(deal.deliveryCostTotal ?? ""))
+        setDeliveryCostCurrency(deal.deliveryCostCurrency || "USD")
+        setDeliveryCostBorder(String(deal.deliveryCostBorder ?? ""))
+        setDeliveryCostBorderCurrency(deal.deliveryCostBorderCurrency || "USD")
+        setDeliveryCostRussia(String(deal.deliveryCostRussia ?? ""))
+        setDeliveryCostRussiaCurrency(deal.deliveryCostRussiaCurrency || "RUB")
+        setIncoterms(deal.incoterms || "EXW")
+        setDeliveryChinaLocal(String(deal.deliveryChinaLocal ?? ""))
+        setDeliveryChinaLocalCurrency(deal.deliveryChinaLocalCurrency || "CNY")
+        setDeliveryRussiaLocal(String(deal.deliveryRussiaLocal ?? ""))
+        setDeliveryRussiaLocalCurrency(deal.deliveryRussiaLocalCurrency || "RUB")
+        setImporter(deal.importer || "client")
+        setHasPermitDocs(Boolean(deal.hasPermitDocs))
+        setCommissionPercent(String(deal.commissionPercent ?? ""))
+        setDeclarant(deal.declarant || "our")
+        setCustomsCostManual(String(deal.customsCostManual ?? ""))
+        setCommissionImporterUsd(String(deal.commissionImporterUsd ?? ""))
+        setSwiftUsd(String(deal.swiftUsd ?? ""))
+        setNotes(deal.notes || "")
+        if (deal.rates) {
+          setRateUsd(String(deal.rates.usd ?? 88.5))
+          setRateCny(String(deal.rates.cny ?? 12.2))
+          setCbUsd(Number(deal.rates.cbUsd ?? cbUsd))
+          setCbCny(Number(deal.rates.cbCny ?? cbCny))
+        }
+      })
+      .finally(() => setIsLoading(false))
+  }, [isNew, params.id])
+
   /* --- calculation --- */
   const rates = useMemo(() => ({
     usd: parseFloat(rateUsd) || 88.5,
     cny: parseFloat(rateCny) || 12.2,
     cbUsd, cbCny,
   }), [rateUsd, rateCny, cbUsd, cbCny])
+
+  const saveDraft = useCallback(async () => {
+    setIsSaving(true)
+    const payload = {
+      number: dealNumber || `КП-${new Date().toISOString().slice(0, 10)}-${Date.now().toString().slice(-4)}`,
+      status,
+      clientName,
+      supplierName,
+      cityFrom,
+      cityTo,
+      items,
+      deliveryMethod,
+      deliveryCostTotal: parseFloat(deliveryCostTotal) || 0,
+      deliveryCostCurrency,
+      deliveryCostBorder: parseFloat(deliveryCostBorder) || 0,
+      deliveryCostBorderCurrency,
+      deliveryCostRussia: parseFloat(deliveryCostRussia) || 0,
+      deliveryCostRussiaCurrency,
+      incoterms,
+      deliveryChinaLocal: parseFloat(deliveryChinaLocal) || 0,
+      deliveryChinaLocalCurrency,
+      deliveryRussiaLocal: parseFloat(deliveryRussiaLocal) || 0,
+      deliveryRussiaLocalCurrency,
+      importer,
+      hasPermitDocs,
+      permitDocs: [],
+      commissionPercent: parseFloat(commissionPercent) || 0,
+      declarant,
+      customsCostManual: parseFloat(customsCostManual) || 0,
+      commissionImporterUsd: parseFloat(commissionImporterUsd) || 0,
+      swiftUsd: parseFloat(swiftUsd) || 0,
+      rates,
+      notes,
+    }
+
+    const endpoint = isNew ? "/api/admin/deals" : `/api/admin/deals/${params.id}`
+    const method = isNew ? "POST" : "PUT"
+    const response = await fetch(endpoint, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+    const result = await response.json().catch(() => null)
+    if (result?.ok) {
+      if (isNew && result.id) {
+        window.location.href = `/admin/deals/${result.id}`
+        return
+      }
+      if (!dealNumber) setDealNumber(payload.number)
+    } else {
+      alert(result?.error || "Не удалось сохранить сделку")
+    }
+    setIsSaving(false)
+  }, [isNew, params.id, dealNumber, status, clientName, supplierName, cityFrom, cityTo, items, deliveryMethod, deliveryCostTotal, deliveryCostCurrency, deliveryCostBorder, deliveryCostBorderCurrency, deliveryCostRussia, deliveryCostRussiaCurrency, incoterms, deliveryChinaLocal, deliveryChinaLocalCurrency, deliveryRussiaLocal, deliveryRussiaLocalCurrency, importer, hasPermitDocs, commissionPercent, declarant, customsCostManual, commissionImporterUsd, swiftUsd, rates, notes])
+
+  const handleDeliveryBorderChange = useCallback((value: string) => {
+    setDeliveryCostBorder(value)
+    const total = parseNumberish(deliveryCostTotal)
+    const border = parseNumberish(value)
+    if (deliveryCostCurrency === deliveryCostBorderCurrency && deliveryCostBorderCurrency === deliveryCostRussiaCurrency && total > 0) {
+      setDeliveryCostRussia(String(Math.max(total - border, 0)))
+    }
+  }, [deliveryCostTotal, deliveryCostCurrency, deliveryCostBorderCurrency, deliveryCostRussiaCurrency])
+
+  const handleDeliveryRussiaChange = useCallback((value: string) => {
+    setDeliveryCostRussia(value)
+    const total = parseNumberish(deliveryCostTotal)
+    const russia = parseNumberish(value)
+    if (deliveryCostCurrency === deliveryCostBorderCurrency && deliveryCostBorderCurrency === deliveryCostRussiaCurrency && total > 0) {
+      setDeliveryCostBorder(String(Math.max(total - russia, 0)))
+    }
+  }, [deliveryCostTotal, deliveryCostCurrency, deliveryCostBorderCurrency, deliveryCostRussiaCurrency])
 
   const dealForCalc = useMemo(() => ({
     id: 0, number: dealNumber, createdAt: "", status: "draft" as const,
@@ -255,6 +406,17 @@ function DealFormPage() {
 
   const calc = useMemo(() => calcDeal(dealForCalc), [dealForCalc])
 
+  const quickProductMatches = useMemo(() => {
+    const q = quickProductQuery.trim().toLowerCase()
+    if (q.length < 2) return []
+    return catalogProducts
+      .filter((product) =>
+        (product.article || "").toLowerCase().includes(q) ||
+        (product.nameRu || "").toLowerCase().includes(q)
+      )
+      .slice(0, 8)
+  }, [quickProductQuery, catalogProducts])
+
   /* --- item helpers --- */
   const updateItem = useCallback((tempId: string, patch: Partial<DealItem>) => {
     setItems((prev) => prev.map((it) => it.tempId === tempId ? { ...it, ...patch } : it))
@@ -262,6 +424,32 @@ function DealFormPage() {
   const removeItem = useCallback((tempId: string) => {
     setItems((prev) => prev.filter((it) => it.tempId !== tempId))
   }, [])
+
+  const applyProductSuggestion = useCallback((tempId: string, query: string, field: "article" | "nameRu") => {
+    const q = query.trim().toLowerCase()
+    if (q.length < 2) return
+
+    const found = catalogProducts.find((product) => {
+      const article = (product.article || "").toLowerCase()
+      const nameRu = (product.nameRu || "").toLowerCase()
+      return article.includes(q) || nameRu.includes(q)
+    })
+
+    if (!found) return
+
+    setItems((prev) => prev.map((it) => {
+      if (it.tempId !== tempId) return it
+      const suggested = itemFromProduct(found)
+      return {
+        ...it,
+        ...suggested,
+        tempId: it.tempId,
+        quantity: it.quantity || 1,
+        article: field === "article" ? query : suggested.article,
+        nameRu: field === "nameRu" ? query : suggested.nameRu,
+      }
+    }))
+  }, [catalogProducts])
 
   /* --- section header --- */
   function SectionHeader({ id, title, num }: { id: string; title: string; num: string }) {
@@ -296,8 +484,8 @@ function DealFormPage() {
             {isNew ? "Новая сделка" : "Сделка " + dealNumber}
           </h1>
         </div>
-        <Button variant="outline" className="gap-2" onClick={() => {/* save draft */}}>
-          Сохранить черновик
+        <Button variant="outline" className="gap-2" onClick={saveDraft} disabled={isSaving || isLoading}>
+          {isSaving ? "Сохраняем..." : "Сохранить черновик"}
         </Button>
       </div>
 
@@ -330,11 +518,11 @@ function DealFormPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
                 <Label>Клиент</Label>
-                <AutoSelect value={clientName} onChange={setClientName} options={clientList} placeholder="Выберите или введите клиента" />
+                <AutoSelect value={clientName} onChange={setClientName} options={clientOptions} placeholder="Выберите или введите клиента" />
               </div>
               <div className="space-y-1">
                 <Label>Продавец</Label>
-                <AutoSelect value={supplierName} onChange={setSupplierName} options={supplierList} placeholder="Выберите или введите продавца" />
+                <AutoSelect value={supplierName} onChange={setSupplierName} options={supplierOptions} placeholder="Выберите или введите продавца" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -371,9 +559,36 @@ function DealFormPage() {
               </Button>
             </div>
 
+            <div className="space-y-2">
+              <Label>Поиск товара (артикул или название)</Label>
+              <Input
+                value={quickProductQuery}
+                onChange={(e) => setQuickProductQuery(e.target.value)}
+                placeholder="Начните вводить артикул или название..."
+              />
+              {quickProductMatches.length > 0 && (
+                <div className="max-h-48 overflow-auto rounded-lg border border-border">
+                  {quickProductMatches.map((product) => (
+                    <button
+                      key={product.id}
+                      type="button"
+                      className="flex w-full items-center justify-between border-b border-border px-3 py-2 text-left text-sm last:border-b-0 hover:bg-accent"
+                      onClick={() => {
+                        setItems((prev) => [...prev, itemFromProduct(product)])
+                        setQuickProductQuery("")
+                      }}
+                    >
+                      <span className="font-medium">{product.article || "—"}</span>
+                      <span className="text-muted-foreground">{product.nameRu || "Без названия"}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {items.length > 0 && (
-              <div className="overflow-x-auto rounded-lg border border-border">
-                <Table>
+              <div className="overflow-x-auto rounded-lg border border-border pb-2">
+                <Table className="min-w-[1650px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-10">{"#"}</TableHead>
@@ -386,6 +601,7 @@ function DealFormPage() {
                       <TableHead>{"НДС %"}</TableHead>
                       <TableHead>{"Акциз"}</TableHead>
                       <TableHead>{"Антидемп. %"}</TableHead>
+                      <TableHead>{"Пошлина ₽"}</TableHead>
                       <TableHead>{"Объем м\u00B3"}</TableHead>
                       <TableHead>{"Вес кг"}</TableHead>
                       <TableHead className="text-right">{"Сумма"}</TableHead>
@@ -400,14 +616,14 @@ function DealFormPage() {
                           <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
                           <TableCell>
                             <Input className="h-8 w-24 text-xs" value={it.article}
-                              onChange={(e) => updateItem(it.tempId, { article: e.target.value })} />
+                              onChange={(e) => { updateItem(it.tempId, { article: e.target.value }); applyProductSuggestion(it.tempId, e.target.value, "article") }} />
                           </TableCell>
                           <TableCell>
                             <Input className="h-8 w-36 text-xs" value={it.nameRu}
-                              onChange={(e) => updateItem(it.tempId, { nameRu: e.target.value })} />
+                              onChange={(e) => { updateItem(it.tempId, { nameRu: e.target.value }); applyProductSuggestion(it.tempId, e.target.value, "nameRu") }} />
                           </TableCell>
                           <TableCell>
-                            <Input type="number" className="h-8 w-16 text-xs" value={it.quantity || ""}
+                            <Input type="number" className="h-8 w-24 text-xs" value={it.quantity || ""}
                               onChange={(e) => updateItem(it.tempId, { quantity: parseInt(e.target.value) || 0 })} />
                           </TableCell>
                           <TableCell>
@@ -448,8 +664,27 @@ function DealFormPage() {
                             <Input type="number" step="0.1" className="h-8 w-14 text-xs" value={it.antiDumping || ""}
                               onChange={(e) => updateItem(it.tempId, { antiDumping: parseFloat(e.target.value) || 0 })} />
                           </TableCell>
-                          <TableCell className="font-mono text-xs">{ic ? fmtNum(ic.totalVolume, 4) : "\u2014"}</TableCell>
-                          <TableCell className="font-mono text-xs">{ic ? fmtNum(ic.totalWeight, 1) : "\u2014"}</TableCell>
+                          <TableCell className="font-mono text-xs">{ic ? fmtNum(ic.dutyRub, 0) : "—"}</TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              step="0.0001"
+                              className="h-8 w-24 text-xs"
+                              value={it.manualTotalVolume || ""}
+                              placeholder={ic ? fmtNum(ic.totalVolume, 4) : ""}
+                              onChange={(e) => updateItem(it.tempId, { manualTotalVolume: parseFloat(e.target.value) || 0 })}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              step="0.1"
+                              className="h-8 w-24 text-xs"
+                              value={it.manualTotalWeight || ""}
+                              placeholder={ic ? fmtNum(ic.totalWeight, 1) : ""}
+                              onChange={(e) => updateItem(it.tempId, { manualTotalWeight: parseFloat(e.target.value) || 0 })}
+                            />
+                          </TableCell>
                           <TableCell className="text-right font-mono text-xs">
                             {ic ? fmtNum(ic.totalPriceRub, 0) + " \u20BD" : "\u2014"}
                           </TableCell>
@@ -464,7 +699,7 @@ function DealFormPage() {
                     })}
                     {/* totals row */}
                     <TableRow className="bg-muted/50 font-semibold">
-                      <TableCell colSpan={10} className="text-right text-xs">Итого:</TableCell>
+                      <TableCell colSpan={11} className="text-right text-xs">Итого:</TableCell>
                       <TableCell className="font-mono text-xs">{fmtNum(calc.totalVolume, 4)}</TableCell>
                       <TableCell className="font-mono text-xs">{fmtNum(calc.totalWeight, 1)}</TableCell>
                       <TableCell className="text-right font-mono text-xs">{fmtNum(calc.totalGoodsRub, 0) + " \u20BD"}</TableCell>
@@ -526,14 +761,14 @@ function DealFormPage() {
               <div className="space-y-1">
                 <Label>До границы</Label>
                 <div className="flex gap-2">
-                  <Input type="number" step="0.01" value={deliveryCostBorder} onChange={(e) => setDeliveryCostBorder(e.target.value)} className="flex-1" placeholder="1100" />
+                  <Input type="number" step="0.01" value={deliveryCostBorder} onChange={(e) => handleDeliveryBorderChange(e.target.value)} className="flex-1" placeholder="1100" />
                   <CurrencySelect value={deliveryCostBorderCurrency} onChange={setDeliveryCostBorderCurrency} />
                 </div>
               </div>
               <div className="space-y-1">
                 <Label>По России</Label>
                 <div className="flex gap-2">
-                  <Input type="number" step="0.01" value={deliveryCostRussia} onChange={(e) => setDeliveryCostRussia(e.target.value)} className="flex-1" placeholder="420" />
+                  <Input type="number" step="0.01" value={deliveryCostRussia} onChange={(e) => handleDeliveryRussiaChange(e.target.value)} className="flex-1" placeholder="420" />
                   <CurrencySelect value={deliveryCostRussiaCurrency} onChange={setDeliveryCostRussiaCurrency} />
                 </div>
               </div>
@@ -719,26 +954,36 @@ function DealFormPage() {
                   <tr className="border-b border-border bg-amber-50/60">
                     <td className="px-4 py-2 font-semibold" colSpan={2}>{"СТП - Совокупный Таможенный Платеж"}</td>
                     <td className="px-4 py-2 text-right font-mono">
-                      {items.map((it) => "Код ТНВЭД " + it.tnved).join(", ")}
+                      ""
                     </td>
-                    <td className="px-4 py-2 text-right font-mono font-semibold">{fmtNum(calc.totalCustomsPayments + calc.customsFee, 2) + " \u20BD"}</td>
+                    <td className="px-4 py-2 text-right font-mono font-semibold">{fmtNum(calc.totalCustomsPayments + calc.customsFee + calc.declarationFee, 2) + " \u20BD"}</td>
                   </tr>
 
                   {/* Customs sub-items */}
                   {calc.customsFee > 0 && (
                     <tr className="border-b border-border bg-amber-50/30">
-                      <td className="px-4 py-2 pl-8">Сбор</td>
+                      <td className="px-4 py-2 pl-8">Таможенный сбор (тариф 2026)</td>
                       <td />
                       <td className="px-4 py-2 text-right font-mono">{fmtNum(calc.customsFee, 0)}</td>
                       <td />
                     </tr>
                   )}
-                  <tr className="border-b border-border bg-amber-50/30">
-                    <td className="px-4 py-2 pl-8">Пошлина</td>
-                    <td />
-                    <td className="px-4 py-2 text-right font-mono">{fmtNum(calc.totalDuty, 2)}</td>
-                    <td />
-                  </tr>
+                  {calc.declarationFee > 0 && (
+                    <tr className="border-b border-border bg-amber-50/30">
+                      <td className="px-4 py-2 pl-8">Стоимость ДС</td>
+                      <td />
+                      <td className="px-4 py-2 text-right font-mono">{fmtNum(calc.declarationFee, 0)}</td>
+                      <td />
+                    </tr>
+                  )}
+                  {calc.dutyByTnved.map((entry) => (
+                    <tr key={entry.tnved} className="border-b border-border bg-amber-50/30">
+                      <td className="px-4 py-2 pl-8">Пошлина ({entry.tnved})</td>
+                      <td />
+                      <td className="px-4 py-2 text-right font-mono">{fmtNum(entry.amount, 2)}</td>
+                      <td />
+                    </tr>
+                  ))}
                   {calc.totalExcise > 0 && (
                     <tr className="border-b border-border bg-amber-50/30">
                       <td className="px-4 py-2 pl-8">Акциз</td>
@@ -768,7 +1013,7 @@ function DealFormPage() {
                       <td className="px-4 py-2 font-medium">Таможенное оформление</td>
                       <td />
                       <td />
-                      <td className="px-4 py-2 text-right font-mono font-semibold">{fmtNum(calc.customsFee, 2) + " \u20BD"}</td>
+                      <td className="px-4 py-2 text-right font-mono font-semibold">{fmtNum(calc.declarationFee, 2) + " \u20BD"}</td>
                     </tr>
                   )}
 
@@ -835,18 +1080,18 @@ function DealFormPage() {
                 type="button"
                 className="flex w-full items-center gap-4 rounded-lg border border-border p-3 text-left transition-colors hover:bg-accent"
                 onClick={() => {
-                  setItems((prev) => [...prev, itemFromCatalog(cp)])
+                  setItems((prev) => [...prev, itemFromProduct(cp)])
                   setAddSheetOpen(false)
                 }}
               >
                 <div className="flex h-12 w-12 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">
-                  {cp.photo ? <img src={cp.photo} alt="" className="h-full w-full object-cover rounded-md" /> : cp.article.slice(0, 3)}
+                  {cp.photo ? <img src={cp.photo} alt="" className="h-full w-full object-cover rounded-md" /> : (cp.article || "ТОВ").slice(0, 3)}
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-medium text-foreground">{cp.nameRu}</p>
                   <p className="text-xs text-muted-foreground">{cp.article + " \u00B7 " + cp.tnved}</p>
                 </div>
-                <p className="font-mono text-sm">{cp.priceSale + " " + CURRENCY_SYMBOLS[cp.priceCurrency]}</p>
+                <p className="font-mono text-sm">{cp.priceSale + " " + CURRENCY_SYMBOLS[cp.currencySale || "CNY"]}</p>
               </button>
             ))}
           </div>

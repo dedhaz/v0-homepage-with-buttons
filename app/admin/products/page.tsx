@@ -21,6 +21,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Plus, Pencil, Upload, X, FileText, ImageIcon, ArrowUpDown, ArrowUp, ArrowDown, Search, Trash2, Download, FileUp } from "lucide-react"
+import { useSearchParams } from "next/navigation"
 
 /* ========== types ========== */
 interface ProductDimensions {
@@ -299,6 +300,10 @@ export default function ProductsPage() {
   const [filterManufacturer, setFilterManufacturer] = useState("")
   const [filterTnved, setFilterTnved] = useState("")
 
+  const searchParams = useSearchParams()
+  const focusId = Number(searchParams.get("focus") || 0)
+  const editIdFromQuery = Number(searchParams.get("edit") || 0)
+
   /* sorting */
   type SortKey = "id" | "article" | "nameRu" | "tnved" | "owner" | "priceSupplier" | "priceSale" | "barcode"
   type SortDir = "asc" | "desc" | null
@@ -354,6 +359,8 @@ export default function ProductsPage() {
       result = result.filter((p) => p.tnved.toLowerCase().includes(q))
     }
 
+    if (focusId > 0) result = result.filter((p) => p.id === focusId)
+
     // sorting
     if (sortKey && sortDir) {
       result.sort((a, b) => {
@@ -369,7 +376,7 @@ export default function ProductsPage() {
     }
 
     return result
-  }, [products, search, filterOwner, filterManufacturer, filterTnved, sortKey, sortDir])
+  }, [products, search, filterOwner, filterManufacturer, filterTnved, sortKey, sortDir, focusId])
 
   /* CBR exchange rates */
   const [rates, setRates] = useState({ usd: 88.50, cny: 12.20 })
@@ -666,6 +673,13 @@ export default function ProductsPage() {
     })
     setOpen(true)
   }
+
+
+  useEffect(() => {
+    if (!editIdFromQuery) return
+    const target = products.find((product) => product.id === editIdFromQuery)
+    if (target) openEdit(target)
+  }, [products, editIdFromQuery])
 
   async function handleSave() {
     setIsSaving(true)

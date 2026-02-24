@@ -566,7 +566,7 @@ function DealFormPage() {
                     variant="outline"
                     size="sm"
                     className="h-7 gap-1 px-2 text-xs"
-                    onClick={() => openEntityEditor("Редактирование клиентов", selectedClientRecord?.id ? `/admin/clients?edit=${selectedClientRecord.id}` : "/admin/clients")}
+                    onClick={() => openEntityEditor("Редактирование клиентов", selectedClientRecord?.id ? `/admin/clients?focus=${selectedClientRecord.id}&edit=${selectedClientRecord.id}&embedded=1` : "/admin/clients?embedded=1")}
                   >
                     <ExternalLink className="h-3 w-3" /> Редактировать
                   </Button>
@@ -601,7 +601,7 @@ function DealFormPage() {
                     variant="outline"
                     size="sm"
                     className="h-7 gap-1 px-2 text-xs"
-                    onClick={() => openEntityEditor("Редактирование поставщиков", selectedSupplierRecord?.id ? `/admin/suppliers?edit=${selectedSupplierRecord.id}` : "/admin/suppliers")}
+                    onClick={() => openEntityEditor("Редактирование поставщиков", selectedSupplierRecord?.id ? `/admin/suppliers?focus=${selectedSupplierRecord.id}&edit=${selectedSupplierRecord.id}&embedded=1` : "/admin/suppliers?embedded=1")}
                   >
                     <ExternalLink className="h-3 w-3" /> Редактировать
                   </Button>
@@ -731,7 +731,7 @@ function DealFormPage() {
                                 variant="outline"
                                 size="sm"
                                 className="h-8 px-2 text-xs"
-                                onClick={() => openEntityEditor("Редактирование товаров", it.productId ? `/admin/products?edit=${it.productId}` : "/admin/products")}
+                                onClick={() => openEntityEditor("Редактирование товаров", it.productId ? `/admin/products?focus=${it.productId}&edit=${it.productId}&embedded=1` : "/admin/products?embedded=1")}
                               >
                                 <ExternalLink className="h-3 w-3" />
                               </Button>
@@ -1182,20 +1182,23 @@ function DealFormPage() {
         )}
       </div>
 
-      <Sheet open={editorSheetOpen} onOpenChange={setEditorSheetOpen}>
-        <SheetContent className="w-[92vw] max-w-5xl p-0">
-          <SheetHeader className="border-b px-4 py-3">
-            <SheetTitle>{editorSheetTitle || "Редактирование"}</SheetTitle>
-          </SheetHeader>
-          <div className="h-[calc(100vh-72px)]">
-            {editorSheetUrl ? (
-              <iframe title={editorSheetTitle || "Редактор"} src={editorSheetUrl} className="h-full w-full border-0" />
-            ) : (
-              <div className="p-4 text-sm text-muted-foreground">Не удалось открыть редактор.</div>
-            )}
+      {editorSheetOpen && (
+        <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm">
+          <div className="flex h-full flex-col">
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              <h3 className="font-display text-base font-semibold">{editorSheetTitle || "Редактирование"}</h3>
+              <Button type="button" variant="outline" size="sm" onClick={() => setEditorSheetOpen(false)}>Закрыть</Button>
+            </div>
+            <div className="h-full min-h-0">
+              {editorSheetUrl ? (
+                <iframe title={editorSheetTitle || "Редактор"} src={editorSheetUrl} className="h-full w-full border-0" />
+              ) : (
+                <div className="p-4 text-sm text-muted-foreground">Не удалось открыть редактор.</div>
+              )}
+            </div>
           </div>
-        </SheetContent>
-      </Sheet>
+        </div>
+      )}
 
       {/* ======= Add from catalog sheet ======= */}
       <Sheet open={addSheetOpen} onOpenChange={setAddSheetOpen}>

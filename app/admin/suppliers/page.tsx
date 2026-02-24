@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   Table,
   TableBody,
@@ -20,6 +20,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Plus, Pencil, Trash2 } from "lucide-react"
+import { useSearchParams } from "next/navigation"
 
 /* ---------- types ---------- */
 interface SupplierAddress {
@@ -129,6 +130,9 @@ const seedSuppliers: Supplier[] = [
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>(seedSuppliers)
   const [isSaving, setIsSaving] = useState(false)
+  const searchParams = useSearchParams()
+  const focusId = Number(searchParams.get("focus") || 0)
+  const editIdFromQuery = Number(searchParams.get("edit") || 0)
   const [open, setOpen] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState<Omit<Supplier, "id">>({
@@ -171,6 +175,18 @@ export default function SuppliersPage() {
     })
     setOpen(true)
   }
+
+
+  useEffect(() => {
+    if (!editIdFromQuery) return
+    const target = suppliers.find((supplier) => supplier.id === editIdFromQuery)
+    if (target) openEdit(target)
+  }, [suppliers, editIdFromQuery])
+
+  const displaySuppliers = useMemo(() => {
+    if (focusId > 0) return suppliers.filter((supplier) => supplier.id === focusId)
+    return suppliers
+  }, [suppliers, focusId])
 
   async function handleSave() {
     setIsSaving(true)
@@ -254,7 +270,7 @@ export default function SuppliersPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {suppliers.map((supplier) => (
+            {displaySuppliers.map((supplier) => (
               <TableRow
                 key={supplier.id}
                 className="cursor-pointer hover:bg-accent/50"

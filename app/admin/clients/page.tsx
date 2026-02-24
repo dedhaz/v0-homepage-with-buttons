@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { Plus, Pencil, ArrowUpDown, ArrowUp, ArrowDown, Search, X, Trash2, FileText } from "lucide-react"
 
 /* ---------- types ---------- */
@@ -248,6 +249,21 @@ export default function ClientsPage() {
   type SortDir = "asc" | "desc" | null
   const [sortKey, setSortKey] = useState<SortKey | null>(null)
   const [sortDir, setSortDir] = useState<SortDir>(null)
+  const searchParams = useSearchParams()
+  const focusId = Number(searchParams.get("focus") || 0)
+  const editIdFromQuery = Number(searchParams.get("edit") || 0)
+
+
+  useEffect(() => {
+    fetch("/api/admin/clients")
+      .then((response) => response.json())
+      .then((result) => {
+        if (result?.ok && Array.isArray(result.items)) {
+          setClients(result.items)
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     fetch("/api/admin/clients")
@@ -296,6 +312,7 @@ export default function ClientsPage() {
     }
 
     if (filterStatus) result = result.filter((c) => c.status === filterStatus)
+    if (focusId > 0) result = result.filter((c) => c.id === focusId)
 
     if (sortKey && sortDir) {
       result.sort((a, b) => {
@@ -311,7 +328,7 @@ export default function ClientsPage() {
     }
 
     return result
-  }, [clients, search, filterStatus, sortKey, sortDir])
+  }, [clients, search, filterStatus, sortKey, sortDir, focusId])
 
   function openNew() {
     setEditingId(null)
@@ -325,6 +342,12 @@ export default function ClientsPage() {
     setForm({ ...rest, shortName: client.shortName || client.companyName || "", fullName: client.fullName || "", contracts: client.contracts.map((c) => ({ ...c })), address: { ...client.address } })
     setOpen(true)
   }
+
+  useEffect(() => {
+    if (!editIdFromQuery) return
+    const target = clients.find((client) => client.id === editIdFromQuery)
+    if (target) openEdit(target)
+  }, [clients, editIdFromQuery])
 
   async function handleSave() {
     setIsSaving(true)

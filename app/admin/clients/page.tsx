@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useEffect, useState, useMemo } from "react"
 import {
   Table,
   TableBody,
@@ -119,6 +119,37 @@ const statusMap: Record<
   blacklist: { label: "Черный список", variant: "destructive" },
 }
 
+
+function toTitleCase(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/(^|\s|-)([a-zа-яё])/giu, (_m, sep: string, ch: string) => `${sep}${ch.toUpperCase()}`)
+}
+
+function shortCompanyName(client: Client) {
+  const name = (client.companyName || "").trim()
+  if (!name) return ""
+
+  const oooMatch = name.match(/(?:общество\s+с\s+ограниченной\s+ответственностью|ооо)\s*["«]?([^"»]+)["»]?/i)
+  if (oooMatch?.[1]) {
+    return `ООО "${toTitleCase(oooMatch[1].trim())}"`
+  }
+
+  const ipExplicit = name.match(/(?:индивидуальный\s+предприниматель|ип)\s+(.+)$/i)
+  const maybeFio = ipExplicit?.[1] || (/^[А-ЯЁ\s-]+$/u.test(name) ? name : "")
+  if (maybeFio) {
+    const parts = maybeFio.trim().split(/\s+/).filter(Boolean)
+    if (parts.length >= 2) {
+      const lastName = toTitleCase(parts[0])
+      const firstInitial = parts[1] ? `${parts[1][0].toUpperCase()}.` : ""
+      const middleInitial = parts[2] ? `${parts[2][0].toUpperCase()}.` : ""
+      return `ИП ${lastName} ${firstInitial}${middleInitial}`.trim()
+    }
+  }
+
+  return name
+}
+
 /* ---------- seed data ---------- */
 const seedClients: Client[] = [
   {
@@ -197,6 +228,9 @@ const seedClients: Client[] = [
 /* ---------- component ---------- */
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>(seedClients)
+  const [isSaving, setIsSaving] = useState(false)
+  const [isInnLookupLoading, setIsInnLookupLoading] = useState(false)
+  const [isBikLookupLoading, setIsBikLookupLoading] = useState(false)
   const [open, setOpen] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState<Omit<Client, "id" | "createdAt">>({ ...emptyClient, address: { ...emptyAddress } })
@@ -210,6 +244,17 @@ export default function ClientsPage() {
   type SortDir = "asc" | "desc" | null
   const [sortKey, setSortKey] = useState<SortKey | null>(null)
   const [sortDir, setSortDir] = useState<SortDir>(null)
+
+  useEffect(() => {
+    fetch("/api/admin/clients")
+      .then((response) => response.json())
+      .then((result) => {
+        if (result?.ok && Array.isArray(result.items)) {
+          setClients(result.items)
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
@@ -275,27 +320,60 @@ export default function ClientsPage() {
     setOpen(true)
   }
 
-  function handleSave() {
+  async function handleSave() {
+    setIsSaving(true)
+
+    try {
     if (editingId !== null) {
-      setClients((prev) =>
-        prev.map((c) =>
-          c.id === editingId ? { ...c, ...form, contracts: form.contracts.map((ct) => ({ ...ct })), address: { ...form.address } } : c
-        )
-      )
+      const payload = { ...form, contracts: form.contracts.map((ct) => ({ ...ct })), address: { ...form.address } }
+      const response = await fetch(`/api/admin/clients/${editingId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) throw new Error("save failed")
+
+      setClients((prev) => prev.map((c) => (c.id === editingId ? { ...c, ...payload } : c)))
     } else {
-      const newId = clients.length > 0 ? Math.max(...clients.map((c) => c.id)) + 1 : 1
+      const payload = { ...form, contracts: form.contracts.map((ct) => ({ ...ct })), address: { ...form.address } }
+      const response = await fetch("/api/admin/clients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      const result = await response.json().catch(() => null)
+
+      if (!response.ok || !result?.id) throw new Error("create failed")
+
       setClients((prev) => [
-        ...prev,
         {
-          id: newId,
+          id: result.id,
           createdAt: new Date().toISOString().slice(0, 10),
-          ...form,
-          contracts: form.contracts.map((ct) => ({ ...ct })),
-          address: { ...form.address },
+          ...payload,
         },
+        ...prev,
       ])
     }
+
     setOpen(false)
+    } catch {
+      alert("Не удалось сохранить клиента")
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function handleDelete(clientId: number) {
+    if (!confirm("Удалить клиента?")) return
+
+    const response = await fetch(`/api/admin/clients/${clientId}`, { method: "DELETE" })
+    if (!response.ok) {
+      alert("Не удалось удалить клиента")
+      return
+    }
+
+    setClients((prev) => prev.filter((item) => item.id !== clientId))
   }
 
   function updateField<K extends keyof Omit<Client, "id" | "createdAt">>(
@@ -307,6 +385,67 @@ export default function ClientsPage() {
 
   function updateAddress<K extends keyof ClientAddress>(key: K, value: string) {
     setForm((prev) => ({ ...prev, address: { ...prev.address, [key]: value } }))
+  }
+
+  async function lookupCompanyByInn() {
+    const inn = form.inn.trim()
+    if (!/^\d{10}(\d{2})?$/.test(inn)) return
+
+    setIsInnLookupLoading(true)
+    try {
+      const response = await fetch(`/api/lookup/company-by-inn?inn=${encodeURIComponent(inn)}`)
+      const result = await response.json().catch(() => null)
+
+      if (!response.ok || !result?.company) {
+        return
+      }
+
+      const company = result.company as {
+        type?: "ИП" | "ООО"
+        ogrn?: string
+        kpp?: string
+        companyName?: string
+        address?: Partial<ClientAddress>
+      }
+
+      setForm((prev) => ({
+        ...prev,
+        type: company.type || prev.type,
+        ogrn: company.ogrn || prev.ogrn,
+        kpp: (company.type || prev.type) === "ООО" ? (company.kpp || prev.kpp) : "",
+        companyName: company.companyName || prev.companyName,
+        address: {
+          ...prev.address,
+          ...(company.address ?? {}),
+        },
+      }))
+    } finally {
+      setIsInnLookupLoading(false)
+    }
+  }
+
+  async function lookupBankByBik() {
+    const bik = form.bik.trim()
+    if (!/^\d{9}$/.test(bik)) return
+
+    setIsBikLookupLoading(true)
+    try {
+      const response = await fetch(`/api/lookup/bank-by-bik?bik=${encodeURIComponent(bik)}`)
+      const result = await response.json().catch(() => null)
+
+      if (!response.ok || !result?.bank) {
+        return
+      }
+
+      const bank = result.bank as { bankName?: string; ks?: string }
+      setForm((prev) => ({
+        ...prev,
+        bankName: bank.bankName || prev.bankName,
+        ks: bank.ks || prev.ks,
+      }))
+    } finally {
+      setIsBikLookupLoading(false)
+    }
   }
 
   return (
@@ -410,7 +549,7 @@ export default function ClientsPage() {
                   >
                     <TableCell className="font-medium text-muted-foreground">{client.id}</TableCell>
                     <TableCell className="text-muted-foreground">{client.createdAt}</TableCell>
-                    <TableCell className="font-medium">{client.companyName}</TableCell>
+                    <TableCell className="font-medium">{shortCompanyName(client)}</TableCell>
                     <TableCell className="text-sm">
                       {client.contracts.length === 0 ? "\u2014" : (
                         <div className="flex flex-col gap-0.5">
@@ -438,6 +577,9 @@ export default function ClientsPage() {
   <Link href={"/admin/deals/new?client=" + encodeURIComponent(client.companyName)} title="Создать сделку">
   <FileText className="h-4 w-4" />
   </Link>
+  </Button>
+  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); handleDelete(client.id) }}>
+  <Trash2 className="h-4 w-4" />
   </Button>
   </div>
   </TableCell>
@@ -576,7 +718,18 @@ export default function ClientsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>ИНН</Label>
-                  <Input value={form.inn} onChange={(e) => updateField("inn", e.target.value)} placeholder="7707123456" />
+                  <div className="flex gap-2">
+                    <Input
+                      value={form.inn}
+                      onChange={(e) => updateField("inn", e.target.value)}
+                      onBlur={lookupCompanyByInn}
+                      placeholder="7707123456"
+                    />
+                    <Button type="button" variant="outline" onClick={lookupCompanyByInn} disabled={isInnLookupLoading}>
+                      Заполнить по ИНН
+                    </Button>
+                  </div>
+                  {isInnLookupLoading && <p className="text-xs text-muted-foreground">Поиск компании по ИНН...</p>}
                 </div>
                 {form.type === "ООО" && (
                   <div className="space-y-2">
@@ -601,7 +754,13 @@ export default function ClientsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>БИК</Label>
-                  <Input value={form.bik} onChange={(e) => updateField("bik", e.target.value)} placeholder="044525225" />
+                  <Input
+                    value={form.bik}
+                    onChange={(e) => updateField("bik", e.target.value)}
+                    onBlur={lookupBankByBik}
+                    placeholder="044525225"
+                  />
+                  {isBikLookupLoading && <p className="text-xs text-muted-foreground">Поиск банка по БИК...</p>}
                 </div>
                 <div className="space-y-2">
                   <Label>Название банка</Label>
@@ -685,8 +844,8 @@ export default function ClientsPage() {
 
             {/* --- actions --- */}
             <div className="flex gap-3 border-t border-border pt-6">
-              <Button onClick={handleSave} className="flex-1">
-                {editingId !== null ? "Сохранить" : "Добавить клиента"}
+              <Button onClick={handleSave} className="flex-1" disabled={isSaving}>
+                {isSaving ? "Сохраняем..." : editingId !== null ? "Сохранить" : "Добавить клиента"}
               </Button>
               <Button variant="outline" onClick={() => setOpen(false)} className="flex-1">
                 Отмена

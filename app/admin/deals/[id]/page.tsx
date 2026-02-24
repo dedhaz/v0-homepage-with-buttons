@@ -48,6 +48,16 @@ interface ProductOption {
 /* ===== helpers ===== */
 function genTempId() { return Math.random().toString(36).slice(2, 10) }
 
+function parseNumberish(value: unknown) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0
+  if (typeof value === "string") {
+    const normalized = value.replace(/\s+/g, "").replace(",", ".")
+    const parsed = Number(normalized)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  return 0
+}
+
 function emptyDealItem(): DealItem {
   return {
     tempId: genTempId(), productId: null, article: "", nameRu: "", photo: "", tnved: "",
@@ -67,22 +77,22 @@ function itemFromProduct(cp: ProductOption): DealItem {
     photo: cp.photo || "",
     tnved: cp.tnved || "",
     description: "",
-    priceSale: Number(cp.priceSale) || 0,
+    priceSale: parseNumberish(cp.priceSale),
     priceCurrency: cp.currencySale || "CNY",
     quantity: 1,
-    dutyPercent: Number(cp.dutyPercent) || 0,
-    vatPercent: Number(cp.vatPercent) || 22,
-    excise: Number(cp.excise) || 0,
-    antiDumping: Number(cp.antiDumping) || 0,
-    dimUnitL: Number(cp.dimUnit?.length) || 0,
-    dimUnitW: Number(cp.dimUnit?.width) || 0,
-    dimUnitH: Number(cp.dimUnit?.height) || 0,
-    weightBruttoUnit: Number(cp.weightBruttoUnit) || 0,
-    dimPackageL: Number(cp.dimPackage?.length) || 0,
-    dimPackageW: Number(cp.dimPackage?.width) || 0,
-    dimPackageH: Number(cp.dimPackage?.height) || 0,
-    weightBruttoPackage: Number(cp.weightBruttoPackage) || 0,
-    qtyInPackage: Number(cp.qtyInPackage) || 0,
+    dutyPercent: parseNumberish(cp.dutyPercent),
+    vatPercent: parseNumberish(cp.vatPercent) || 22,
+    excise: parseNumberish(cp.excise),
+    antiDumping: parseNumberish(cp.antiDumping),
+    dimUnitL: parseNumberish(cp.dimUnit?.length),
+    dimUnitW: parseNumberish(cp.dimUnit?.width),
+    dimUnitH: parseNumberish(cp.dimUnit?.height),
+    weightBruttoUnit: parseNumberish(cp.weightBruttoUnit),
+    dimPackageL: parseNumberish(cp.dimPackage?.length),
+    dimPackageW: parseNumberish(cp.dimPackage?.width),
+    dimPackageH: parseNumberish(cp.dimPackage?.height),
+    weightBruttoPackage: parseNumberish(cp.weightBruttoPackage),
+    qtyInPackage: parseNumberish(cp.qtyInPackage),
   }
 }
 
@@ -273,6 +283,12 @@ function DealFormPage() {
         setCommissionImporterUsd(String(deal.commissionImporterUsd ?? ""))
         setSwiftUsd(String(deal.swiftUsd ?? ""))
         setNotes(deal.notes || "")
+        if (deal.rates) {
+          setRateUsd(String(deal.rates.usd ?? 88.5))
+          setRateCny(String(deal.rates.cny ?? 12.2))
+          setCbUsd(Number(deal.rates.cbUsd ?? cbUsd))
+          setCbCny(Number(deal.rates.cbCny ?? cbCny))
+        }
       })
       .finally(() => setIsLoading(false))
   }, [isNew, params.id])
@@ -337,6 +353,24 @@ function DealFormPage() {
     }
     setIsSaving(false)
   }, [isNew, params.id, dealNumber, status, clientName, supplierName, cityFrom, cityTo, items, deliveryMethod, deliveryCostTotal, deliveryCostCurrency, deliveryCostBorder, deliveryCostBorderCurrency, deliveryCostRussia, deliveryCostRussiaCurrency, incoterms, deliveryChinaLocal, deliveryChinaLocalCurrency, deliveryRussiaLocal, deliveryRussiaLocalCurrency, importer, hasPermitDocs, commissionPercent, declarant, customsCostManual, commissionImporterUsd, swiftUsd, rates, notes])
+
+  const handleDeliveryBorderChange = useCallback((value: string) => {
+    setDeliveryCostBorder(value)
+    const total = parseNumberish(deliveryCostTotal)
+    const border = parseNumberish(value)
+    if (deliveryCostCurrency === deliveryCostBorderCurrency && deliveryCostBorderCurrency === deliveryCostRussiaCurrency && total > 0) {
+      setDeliveryCostRussia(String(Math.max(total - border, 0)))
+    }
+  }, [deliveryCostTotal, deliveryCostCurrency, deliveryCostBorderCurrency, deliveryCostRussiaCurrency])
+
+  const handleDeliveryRussiaChange = useCallback((value: string) => {
+    setDeliveryCostRussia(value)
+    const total = parseNumberish(deliveryCostTotal)
+    const russia = parseNumberish(value)
+    if (deliveryCostCurrency === deliveryCostBorderCurrency && deliveryCostBorderCurrency === deliveryCostRussiaCurrency && total > 0) {
+      setDeliveryCostBorder(String(Math.max(total - russia, 0)))
+    }
+  }, [deliveryCostTotal, deliveryCostCurrency, deliveryCostBorderCurrency, deliveryCostRussiaCurrency])
 
   const dealForCalc = useMemo(() => ({
     id: 0, number: dealNumber, createdAt: "", status: "draft" as const,
@@ -502,6 +536,7 @@ function DealFormPage() {
                       <TableHead>{"НДС %"}</TableHead>
                       <TableHead>{"Акциз"}</TableHead>
                       <TableHead>{"Антидемп. %"}</TableHead>
+                      <TableHead>{"Пошлина ₽"}</TableHead>
                       <TableHead>{"Объем м\u00B3"}</TableHead>
                       <TableHead>{"Вес кг"}</TableHead>
                       <TableHead className="text-right">{"Сумма"}</TableHead>
@@ -564,6 +599,7 @@ function DealFormPage() {
                             <Input type="number" step="0.1" className="h-8 w-14 text-xs" value={it.antiDumping || ""}
                               onChange={(e) => updateItem(it.tempId, { antiDumping: parseFloat(e.target.value) || 0 })} />
                           </TableCell>
+                          <TableCell className="font-mono text-xs">{ic ? fmtNum(ic.dutyRub, 0) : "\u2014"}</TableCell>
                           <TableCell className="font-mono text-xs">{ic ? fmtNum(ic.totalVolume, 4) : "\u2014"}</TableCell>
                           <TableCell className="font-mono text-xs">{ic ? fmtNum(ic.totalWeight, 1) : "\u2014"}</TableCell>
                           <TableCell className="text-right font-mono text-xs">
@@ -580,7 +616,7 @@ function DealFormPage() {
                     })}
                     {/* totals row */}
                     <TableRow className="bg-muted/50 font-semibold">
-                      <TableCell colSpan={10} className="text-right text-xs">Итого:</TableCell>
+                      <TableCell colSpan={11} className="text-right text-xs">Итого:</TableCell>
                       <TableCell className="font-mono text-xs">{fmtNum(calc.totalVolume, 4)}</TableCell>
                       <TableCell className="font-mono text-xs">{fmtNum(calc.totalWeight, 1)}</TableCell>
                       <TableCell className="text-right font-mono text-xs">{fmtNum(calc.totalGoodsRub, 0) + " \u20BD"}</TableCell>
@@ -642,14 +678,14 @@ function DealFormPage() {
               <div className="space-y-1">
                 <Label>До границы</Label>
                 <div className="flex gap-2">
-                  <Input type="number" step="0.01" value={deliveryCostBorder} onChange={(e) => setDeliveryCostBorder(e.target.value)} className="flex-1" placeholder="1100" />
+                  <Input type="number" step="0.01" value={deliveryCostBorder} onChange={(e) => handleDeliveryBorderChange(e.target.value)} className="flex-1" placeholder="1100" />
                   <CurrencySelect value={deliveryCostBorderCurrency} onChange={setDeliveryCostBorderCurrency} />
                 </div>
               </div>
               <div className="space-y-1">
                 <Label>По России</Label>
                 <div className="flex gap-2">
-                  <Input type="number" step="0.01" value={deliveryCostRussia} onChange={(e) => setDeliveryCostRussia(e.target.value)} className="flex-1" placeholder="420" />
+                  <Input type="number" step="0.01" value={deliveryCostRussia} onChange={(e) => handleDeliveryRussiaChange(e.target.value)} className="flex-1" placeholder="420" />
                   <CurrencySelect value={deliveryCostRussiaCurrency} onChange={setDeliveryCostRussiaCurrency} />
                 </div>
               </div>
@@ -837,24 +873,34 @@ function DealFormPage() {
                     <td className="px-4 py-2 text-right font-mono">
                       {items.map((it) => "Код ТНВЭД " + it.tnved).join(", ")}
                     </td>
-                    <td className="px-4 py-2 text-right font-mono font-semibold">{fmtNum(calc.totalCustomsPayments + calc.customsFee, 2) + " \u20BD"}</td>
+                    <td className="px-4 py-2 text-right font-mono font-semibold">{fmtNum(calc.totalCustomsPayments + calc.customsFee + calc.declarationFee, 2) + " \u20BD"}</td>
                   </tr>
 
                   {/* Customs sub-items */}
                   {calc.customsFee > 0 && (
                     <tr className="border-b border-border bg-amber-50/30">
-                      <td className="px-4 py-2 pl-8">Сбор</td>
+                      <td className="px-4 py-2 pl-8">Таможенный сбор (тариф 2026)</td>
                       <td />
                       <td className="px-4 py-2 text-right font-mono">{fmtNum(calc.customsFee, 0)}</td>
                       <td />
                     </tr>
                   )}
-                  <tr className="border-b border-border bg-amber-50/30">
-                    <td className="px-4 py-2 pl-8">Пошлина</td>
-                    <td />
-                    <td className="px-4 py-2 text-right font-mono">{fmtNum(calc.totalDuty, 2)}</td>
-                    <td />
-                  </tr>
+                  {calc.declarationFee > 0 && (
+                    <tr className="border-b border-border bg-amber-50/30">
+                      <td className="px-4 py-2 pl-8">Стоимость ДС</td>
+                      <td />
+                      <td className="px-4 py-2 text-right font-mono">{fmtNum(calc.declarationFee, 0)}</td>
+                      <td />
+                    </tr>
+                  )}
+                  {calc.dutyByTnved.map((entry) => (
+                    <tr key={entry.tnved} className="border-b border-border bg-amber-50/30">
+                      <td className="px-4 py-2 pl-8">Пошлина ({entry.tnved})</td>
+                      <td />
+                      <td className="px-4 py-2 text-right font-mono">{fmtNum(entry.amount, 2)}</td>
+                      <td />
+                    </tr>
+                  ))}
                   {calc.totalExcise > 0 && (
                     <tr className="border-b border-border bg-amber-50/30">
                       <td className="px-4 py-2 pl-8">Акциз</td>
@@ -884,7 +930,7 @@ function DealFormPage() {
                       <td className="px-4 py-2 font-medium">Таможенное оформление</td>
                       <td />
                       <td />
-                      <td className="px-4 py-2 text-right font-mono font-semibold">{fmtNum(calc.customsFee, 2) + " \u20BD"}</td>
+                      <td className="px-4 py-2 text-right font-mono font-semibold">{fmtNum(calc.declarationFee, 2) + " \u20BD"}</td>
                     </tr>
                   )}
 

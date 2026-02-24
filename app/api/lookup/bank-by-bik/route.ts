@@ -1,6 +1,18 @@
 import { NextResponse } from "next/server"
 import { requireAuth } from "@/lib/server/api-auth"
 
+function decodeXmlBuffer(buffer: ArrayBuffer) {
+  const utf8 = new TextDecoder("utf-8").decode(buffer)
+  if (!utf8.includes("���") && !utf8.includes("�")) return utf8
+
+  try {
+    const cp1251 = new TextDecoder("windows-1251").decode(buffer)
+    return cp1251
+  } catch {
+    return utf8
+  }
+}
+
 function xmlValue(xml: string, tag: string) {
   const match = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, "i"))
   return match?.[1]?.trim() ?? ""
@@ -37,7 +49,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "Сервис ЦБ недоступен" }, { status: 502 })
   }
 
-  const xml = await response.text().catch(() => "")
+  const xmlBuffer = await response.arrayBuffer().catch(() => null)
+  const xml = xmlBuffer ? decodeXmlBuffer(xmlBuffer) : ""
 
   const bankName =
     xmlNestedAttrValue(xml, "ParticipantInfo", "NameP") ||
@@ -49,13 +62,15 @@ export async function GET(request: Request) {
     xmlValue(xml, "VKEY") ||
     xmlValue(xml, "NAMEP")
 
-  const ks =
+  const ksRaw =
     xmlNestedAttrValue(xml, "Accounts", "Account") ||
     xmlNestedAttrValue(xml, "Accounts", "Ksnp") ||
     xmlAttrValue(xml, "Account") ||
     xmlAttrValue(xml, "Ksnp") ||
     xmlValue(xml, "KSNP") ||
     xmlValue(xml, "Account")
+
+  const ks = ksRaw.replace(/[^\d]/g, "")
 
   if (!bankName && !ks) {
     return NextResponse.json({ ok: false, error: "Банк по БИК не найден" }, { status: 404 })

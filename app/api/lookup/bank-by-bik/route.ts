@@ -2,12 +2,17 @@ import { NextResponse } from "next/server"
 import { requireAuth } from "@/lib/server/api-auth"
 
 function xmlValue(xml: string, tag: string) {
-  const match = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, "i"))
+  const match = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, "i"))
   return match?.[1]?.trim() ?? ""
 }
 
 function xmlAttrValue(xml: string, attr: string) {
-  const match = xml.match(new RegExp(`${attr}="([^"]+)"`, "i"))
+  const match = xml.match(new RegExp(`${attr}\\s*=\\s*["']([^"']+)["']`, "i"))
+  return match?.[1]?.trim() ?? ""
+}
+
+function xmlNestedAttrValue(xml: string, tag: string, attr: string) {
+  const match = xml.match(new RegExp(`<${tag}[^>]*${attr}\\s*=\\s*["']([^"']+)["'][^>]*>`, "i"))
   return match?.[1]?.trim() ?? ""
 }
 
@@ -25,6 +30,7 @@ export async function GET(request: Request) {
   const response = await fetch(`https://www.cbr.ru/scripts/XML_bic.asp?bic=${bik}`, {
     method: "GET",
     cache: "no-store",
+    headers: { "User-Agent": "Mozilla/5.0" },
   }).catch(() => null)
 
   if (!response?.ok) {
@@ -32,12 +38,24 @@ export async function GET(request: Request) {
   }
 
   const xml = await response.text().catch(() => "")
+
   const bankName =
+    xmlNestedAttrValue(xml, "ParticipantInfo", "NameP") ||
     xmlAttrValue(xml, "NameP") ||
+    xmlNestedAttrValue(xml, "ParticipantInfo", "ShortName") ||
+    xmlAttrValue(xml, "ShortName") ||
     xmlValue(xml, "NameP") ||
+    xmlValue(xml, "SHORTNAME") ||
     xmlValue(xml, "VKEY") ||
     xmlValue(xml, "NAMEP")
-  const ks = xmlAttrValue(xml, "Ksnp") || xmlValue(xml, "KSNP")
+
+  const ks =
+    xmlNestedAttrValue(xml, "Accounts", "Account") ||
+    xmlNestedAttrValue(xml, "Accounts", "Ksnp") ||
+    xmlAttrValue(xml, "Account") ||
+    xmlAttrValue(xml, "Ksnp") ||
+    xmlValue(xml, "KSNP") ||
+    xmlValue(xml, "Account")
 
   if (!bankName && !ks) {
     return NextResponse.json({ ok: false, error: "Банк по БИК не найден" }, { status: 404 })

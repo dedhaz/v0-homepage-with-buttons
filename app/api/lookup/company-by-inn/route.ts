@@ -1,25 +1,19 @@
 import { NextResponse } from "next/server"
 import { requireAuth } from "@/lib/server/api-auth"
 
-function parseAddress(addressRaw: string) {
-  const indexMatch = addressRaw.match(/\b\d{6}\b/)
-  const cityMatch = addressRaw.match(/\bг\.?\s*([^,]+)/i)
-  const streetMatch = addressRaw.match(/\b(ул\.?\s*[^,]+)/i)
-  const houseMatch = addressRaw.match(/\bд\.?\s*([^,]+)/i)
-
-  return {
-    index: indexMatch?.[0] ?? "",
-    city: cityMatch?.[1]?.trim() ?? "",
-    street: streetMatch?.[1]?.trim() ?? "",
-    house: houseMatch?.[1]?.trim() ?? "",
-    region: addressRaw,
-  }
-}
-
 function toTitleCase(value: string) {
   return value
     .toLowerCase()
     .replace(/(^|\s|-)([a-zа-яё])/giu, (_m, sep: string, ch: string) => `${sep}${ch.toUpperCase()}`)
+}
+
+function initialsFromFio(fio: string) {
+  const parts = fio.split(/\s+/).filter(Boolean)
+  if (parts.length < 2) return toTitleCase(fio)
+  const [lastName, firstName, middleName] = parts
+  const fi = firstName ? `${firstName[0].toUpperCase()}.` : ""
+  const mi = middleName ? `${middleName[0].toUpperCase()}.` : ""
+  return `${toTitleCase(lastName)} ${fi}${mi}`.trim()
 }
 
 function normalizeCompanyName(raw: string) {
@@ -28,24 +22,63 @@ function normalizeCompanyName(raw: string) {
 
   const ipMatch = normalized.match(/(?:индивидуальный\s+предприниматель|ип)\s+(.+)$/i)
   if (ipMatch?.[1]) {
-    return `ИП ${toTitleCase(ipMatch[1].replace(/["']/g, "").trim())}`
+    return `ИП ${initialsFromFio(ipMatch[1].replace(/["']/g, "").trim())}`
+  }
+
+  if (/^[А-ЯЁ\s]+$/.test(normalized) && normalized.split(/\s+/).length >= 2) {
+    return `ИП ${initialsFromFio(normalized)}`
   }
 
   return normalized
 }
 
-function getAddressRaw(row: Record<string, unknown>) {
-  const direct = typeof row.a === "string" ? row.a : ""
-  if (direct.trim()) return direct.trim()
+function parseAddress(addressRaw: string) {
+  const normalized = addressRaw.replace(/\s+/g, " ").trim()
+  const parts = normalized.split(",").map((item) => item.trim()).filter(Boolean)
 
-  const addr = row.a as Record<string, unknown> | undefined
-  if (addr && typeof addr === "object") {
-    const text = typeof addr.a === "string" ? addr.a : typeof addr.c === "string" ? addr.c : ""
-    if (text.trim()) return text.trim()
+  const index = normalized.match(/\b\d{6}\b/)?.[0] ?? ""
+  const region = parts.find((p) => /обл\.|область|край|респ\.|республика|АО|округ|г\.\s*москва|г\.\s*санкт-петербург/i.test(p)) ?? ""
+  const city = parts.find((p) => /^(г\.?|гор\.?|город|п\.?|пос\.?|поселок|с\.?|дер\.?|д\.?\s*\w+)/i.test(p)) ?? ""
+  const street = parts.find((p) => /ул\.|улица|пр-кт|проспект|пер\.|переулок|наб\.|ш\.|шоссе|б-р|бульвар/i.test(p)) ?? ""
+  const house = parts.find((p) => /(^|\s)(д\.?|дом|вл\.?|строен|корп\.?)/i.test(p)) ?? ""
+
+  return {
+    index,
+    region,
+    city: city.replace(/^(г\.?|город)\s*/i, "").trim(),
+    street,
+    house,
   }
+}
 
-  const alt = [row.adr, row.address, row.address_full].find((v) => typeof v === "string")
-  return typeof alt === "string" ? alt.trim() : ""
+function pickString(obj: unknown, keys: string[]): string {
+  if (!obj || typeof obj !== "object") return ""
+  const map = obj as Record<string, unknown>
+  for (const key of keys) {
+    const direct = map[key]
+    if (typeof direct === "string" && direct.trim()) return direct.trim()
+  }
+  for (const value of Object.values(map)) {
+    if (value && typeof value === "object") {
+      const nested = pickString(value, keys)
+      if (nested) return nested
+    }
+  }
+  return ""
+}
+
+function getAddressRaw(row: Record<string, unknown>) {
+  const fromRow = pickString(row, ["a", "adr", "address", "address_full"])
+  if (fromRow) return fromRow
+
+  const fromAddressObj = pickString(row.a, ["a", "c", "text", "full"])
+  return fromAddressObj
+}
+
+function detectType(inn: string, rawName: string) {
+  if (inn.length === 12) return "ИП"
+  if (/(?:индивидуальный\s+предприниматель|\bип\b)/i.test(rawName)) return "ИП"
+  return "ООО"
 }
 
 export async function GET(request: Request) {
@@ -86,7 +119,7 @@ export async function GET(request: Request) {
   }
 
   const resultData = (await resultResponse.json().catch(() => null)) as
-    | { rows?: Array<Record<string, unknown> & { n?: string; c?: string; o?: string }> }
+    | { rows?: Array<Record<string, unknown> & { n?: string; c?: string; o?: string; p?: string; k?: string }> }
     | null
 
   const row = resultData?.rows?.[0]
@@ -94,13 +127,17 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "Компания не найдена" }, { status: 404 })
   }
 
+  const rawName = row.n?.trim() || row.c?.trim() || ""
   const addressRaw = getAddressRaw(row)
+  const type = detectType(inn, rawName)
 
   return NextResponse.json({
     ok: true,
     company: {
+      type,
       ogrn: row.o?.trim() ?? "",
-      companyName: normalizeCompanyName(row.n?.trim() || row.c?.trim() || ""),
+      kpp: type === "ООО" ? (row.p?.trim() || row.k?.trim() || pickString(row, ["kpp", "КПП"])) : "",
+      companyName: normalizeCompanyName(rawName),
       addressRaw,
       address: parseAddress(addressRaw),
     },

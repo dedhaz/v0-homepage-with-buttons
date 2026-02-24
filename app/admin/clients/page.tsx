@@ -119,6 +119,37 @@ const statusMap: Record<
   blacklist: { label: "Черный список", variant: "destructive" },
 }
 
+
+function toTitleCase(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/(^|\s|-)([a-zа-яё])/giu, (_m, sep: string, ch: string) => `${sep}${ch.toUpperCase()}`)
+}
+
+function shortCompanyName(client: Client) {
+  const name = (client.companyName || "").trim()
+  if (!name) return ""
+
+  const oooMatch = name.match(/(?:общество\s+с\s+ограниченной\s+ответственностью|ооо)\s*["«]?([^"»]+)["»]?/i)
+  if (oooMatch?.[1]) {
+    return `ООО "${toTitleCase(oooMatch[1].trim())}"`
+  }
+
+  const ipExplicit = name.match(/(?:индивидуальный\s+предприниматель|ип)\s+(.+)$/i)
+  const maybeFio = ipExplicit?.[1] || (/^[А-ЯЁ\s-]+$/u.test(name) ? name : "")
+  if (maybeFio) {
+    const parts = maybeFio.trim().split(/\s+/).filter(Boolean)
+    if (parts.length >= 2) {
+      const lastName = toTitleCase(parts[0])
+      const firstInitial = parts[1] ? `${parts[1][0].toUpperCase()}.` : ""
+      const middleInitial = parts[2] ? `${parts[2][0].toUpperCase()}.` : ""
+      return `ИП ${lastName} ${firstInitial}${middleInitial}`.trim()
+    }
+  }
+
+  return name
+}
+
 /* ---------- seed data ---------- */
 const seedClients: Client[] = [
   {
@@ -370,14 +401,18 @@ export default function ClientsPage() {
       }
 
       const company = result.company as {
+        type?: "ИП" | "ООО"
         ogrn?: string
+        kpp?: string
         companyName?: string
         address?: Partial<ClientAddress>
       }
 
       setForm((prev) => ({
         ...prev,
+        type: company.type || prev.type,
         ogrn: company.ogrn || prev.ogrn,
+        kpp: (company.type || prev.type) === "ООО" ? (company.kpp || prev.kpp) : "",
         companyName: company.companyName || prev.companyName,
         address: {
           ...prev.address,
@@ -514,7 +549,7 @@ export default function ClientsPage() {
                   >
                     <TableCell className="font-medium text-muted-foreground">{client.id}</TableCell>
                     <TableCell className="text-muted-foreground">{client.createdAt}</TableCell>
-                    <TableCell className="font-medium">{client.companyName}</TableCell>
+                    <TableCell className="font-medium">{shortCompanyName(client)}</TableCell>
                     <TableCell className="text-sm">
                       {client.contracts.length === 0 ? "\u2014" : (
                         <div className="flex flex-col gap-0.5">
@@ -683,12 +718,17 @@ export default function ClientsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>ИНН</Label>
-                  <Input
-                    value={form.inn}
-                    onChange={(e) => updateField("inn", e.target.value)}
-                    onBlur={lookupCompanyByInn}
-                    placeholder="7707123456"
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      value={form.inn}
+                      onChange={(e) => updateField("inn", e.target.value)}
+                      onBlur={lookupCompanyByInn}
+                      placeholder="7707123456"
+                    />
+                    <Button type="button" variant="outline" onClick={lookupCompanyByInn} disabled={isInnLookupLoading}>
+                      Заполнить по ИНН
+                    </Button>
+                  </div>
                   {isInnLookupLoading && <p className="text-xs text-muted-foreground">Поиск компании по ИНН...</p>}
                 </div>
                 {form.type === "ООО" && (

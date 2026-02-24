@@ -265,6 +265,17 @@ export default function ClientsPage() {
       .catch(() => {})
   }, [])
 
+  useEffect(() => {
+    fetch("/api/admin/clients")
+      .then((response) => response.json())
+      .then((result) => {
+        if (result?.ok && Array.isArray(result.items)) {
+          setClients(result.items)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
       if (sortDir === "asc") setSortDir("desc")

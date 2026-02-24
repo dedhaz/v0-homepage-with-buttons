@@ -208,6 +208,7 @@ function DealFormPage() {
   /* --- item add sheet --- */
   const [addSheetOpen, setAddSheetOpen] = useState(false)
   const [addMode, setAddMode] = useState<"catalog" | "manual">("catalog")
+  const [quickProductQuery, setQuickProductQuery] = useState("")
 
   /* --- expand sections --- */
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
@@ -405,6 +406,17 @@ function DealFormPage() {
 
   const calc = useMemo(() => calcDeal(dealForCalc), [dealForCalc])
 
+  const quickProductMatches = useMemo(() => {
+    const q = quickProductQuery.trim().toLowerCase()
+    if (q.length < 2) return []
+    return catalogProducts
+      .filter((product) =>
+        (product.article || "").toLowerCase().includes(q) ||
+        (product.nameRu || "").toLowerCase().includes(q)
+      )
+      .slice(0, 8)
+  }, [quickProductQuery, catalogProducts])
+
   /* --- item helpers --- */
   const updateItem = useCallback((tempId: string, patch: Partial<DealItem>) => {
     setItems((prev) => prev.map((it) => it.tempId === tempId ? { ...it, ...patch } : it))
@@ -545,6 +557,33 @@ function DealFormPage() {
               }}>
                 <Plus className="h-3 w-3" /> Вручную
               </Button>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Поиск товара (артикул или название)</Label>
+              <Input
+                value={quickProductQuery}
+                onChange={(e) => setQuickProductQuery(e.target.value)}
+                placeholder="Начните вводить артикул или название..."
+              />
+              {quickProductMatches.length > 0 && (
+                <div className="max-h-48 overflow-auto rounded-lg border border-border">
+                  {quickProductMatches.map((product) => (
+                    <button
+                      key={product.id}
+                      type="button"
+                      className="flex w-full items-center justify-between border-b border-border px-3 py-2 text-left text-sm last:border-b-0 hover:bg-accent"
+                      onClick={() => {
+                        setItems((prev) => [...prev, itemFromProduct(product)])
+                        setQuickProductQuery("")
+                      }}
+                    >
+                      <span className="font-medium">{product.article || "—"}</span>
+                      <span className="text-muted-foreground">{product.nameRu || "Без названия"}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {items.length > 0 && (

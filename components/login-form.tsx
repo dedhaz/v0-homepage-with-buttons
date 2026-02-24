@@ -2,34 +2,53 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Eye, EyeOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { login } from "@/lib/auth-storage"
 
 export function LoginForm() {
+  const router = useRouter()
   const [form, setForm] = useState({
     email: "",
     password: "",
   })
   const [showPassword, setShowPassword] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState("")
 
   const allFieldsFilled = form.email.trim() !== "" && form.password.trim() !== ""
   const canSubmit = allFieldsFilled && confirmed
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!canSubmit) return
-    // Login logic here
+
+    setIsSubmitting(true)
+    setError("")
+
+    const result = await login({
+      email: form.email.trim(),
+      password: form.password,
+    })
+
+    if (!result.ok) {
+      setError(result.error ?? "Не удалось выполнить вход")
+      setIsSubmitting(false)
+      return
+    }
+
+    router.push("/admin/clients")
+    router.refresh()
   }
 
   return (
     <div className="mx-auto w-full max-w-md">
       <div className="rounded-2xl border border-border bg-card p-8">
-        <h1 className="mb-8 text-center font-display text-2xl font-bold text-foreground">
-          Войти
-        </h1>
+        <h1 className="mb-8 text-center font-display text-2xl font-bold text-foreground">Войти</h1>
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-2">
@@ -80,9 +99,11 @@ export function LoginForm() {
             </label>
           </div>
 
+          {error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+
           <div className="flex flex-col gap-3 pt-2">
-            <Button type="submit" size="lg" className="w-full" disabled={!canSubmit}>
-              Войти
+            <Button type="submit" size="lg" className="w-full" disabled={!canSubmit || isSubmitting}>
+              {isSubmitting ? "Входим..." : "Войти"}
             </Button>
             <Button variant="ghost" size="sm" className="w-full" asChild>
               <Link href="/register">Зарегистрироваться</Link>

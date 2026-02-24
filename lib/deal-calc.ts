@@ -102,6 +102,13 @@ export function calcDeal(deal: Deal): DealCalcResult {
       totalWeight = item.weightBruttoUnit > 0 ? item.weightBruttoUnit * item.quantity * 1.1 : 0
     }
 
+    if ((item.manualTotalVolume || 0) > 0) {
+      totalVolume = item.manualTotalVolume || 0
+    }
+    if ((item.manualTotalWeight || 0) > 0) {
+      totalWeight = item.manualTotalWeight || 0
+    }
+
     return {
       item,
       totalPriceOriginal,

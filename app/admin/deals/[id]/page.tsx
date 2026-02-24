@@ -413,6 +413,32 @@ function DealFormPage() {
     setItems((prev) => prev.filter((it) => it.tempId !== tempId))
   }, [])
 
+  const applyProductSuggestion = useCallback((tempId: string, query: string, field: "article" | "nameRu") => {
+    const q = query.trim().toLowerCase()
+    if (q.length < 2) return
+
+    const found = catalogProducts.find((product) => {
+      const article = (product.article || "").toLowerCase()
+      const nameRu = (product.nameRu || "").toLowerCase()
+      return article.includes(q) || nameRu.includes(q)
+    })
+
+    if (!found) return
+
+    setItems((prev) => prev.map((it) => {
+      if (it.tempId !== tempId) return it
+      const suggested = itemFromProduct(found)
+      return {
+        ...it,
+        ...suggested,
+        tempId: it.tempId,
+        quantity: it.quantity || 1,
+        article: field === "article" ? query : suggested.article,
+        nameRu: field === "nameRu" ? query : suggested.nameRu,
+      }
+    }))
+  }, [catalogProducts])
+
   /* --- section header --- */
   function SectionHeader({ id, title, num }: { id: string; title: string; num: string }) {
     const isOpen = expandedSections[id] !== false
@@ -522,8 +548,8 @@ function DealFormPage() {
             </div>
 
             {items.length > 0 && (
-              <div className="overflow-x-auto rounded-lg border border-border">
-                <Table>
+              <div className="overflow-x-auto rounded-lg border border-border pb-2">
+                <Table className="min-w-[1650px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-10">{"#"}</TableHead>
@@ -551,14 +577,14 @@ function DealFormPage() {
                           <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
                           <TableCell>
                             <Input className="h-8 w-24 text-xs" value={it.article}
-                              onChange={(e) => updateItem(it.tempId, { article: e.target.value })} />
+                              onChange={(e) => { updateItem(it.tempId, { article: e.target.value }); applyProductSuggestion(it.tempId, e.target.value, "article") }} />
                           </TableCell>
                           <TableCell>
                             <Input className="h-8 w-36 text-xs" value={it.nameRu}
-                              onChange={(e) => updateItem(it.tempId, { nameRu: e.target.value })} />
+                              onChange={(e) => { updateItem(it.tempId, { nameRu: e.target.value }); applyProductSuggestion(it.tempId, e.target.value, "nameRu") }} />
                           </TableCell>
                           <TableCell>
-                            <Input type="number" className="h-8 w-16 text-xs" value={it.quantity || ""}
+                            <Input type="number" className="h-8 w-24 text-xs" value={it.quantity || ""}
                               onChange={(e) => updateItem(it.tempId, { quantity: parseInt(e.target.value) || 0 })} />
                           </TableCell>
                           <TableCell>
@@ -871,7 +897,7 @@ function DealFormPage() {
                   <tr className="border-b border-border bg-amber-50/60">
                     <td className="px-4 py-2 font-semibold" colSpan={2}>{"СТП - Совокупный Таможенный Платеж"}</td>
                     <td className="px-4 py-2 text-right font-mono">
-                      {items.map((it) => "Код ТНВЭД " + it.tnved).join(", ")}
+                      ""
                     </td>
                     <td className="px-4 py-2 text-right font-mono font-semibold">{fmtNum(calc.totalCustomsPayments + calc.customsFee + calc.declarationFee, 2) + " \u20BD"}</td>
                   </tr>

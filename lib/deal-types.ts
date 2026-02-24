@@ -82,6 +82,10 @@ export interface Deal {
   deliveryRussiaLocal: number
   deliveryRussiaLocalCurrency: Currency
   importer: ImporterType
+  isClientImporter?: boolean
+  importerClientName?: string
+  isSupplierManufacturer?: boolean
+  manufacturerSupplierName?: string
   hasPermitDocs: boolean
   permitDocs: { name: string; url: string }[]
   commissionPercent: number // importer commission %

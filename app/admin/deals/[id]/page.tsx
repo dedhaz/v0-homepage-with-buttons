@@ -15,7 +15,7 @@ import {
   Sheet, SheetContent, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet"
 import {
-  ArrowLeft, Plus, Trash2, Upload, ChevronDown, ChevronUp, Download,
+  ArrowLeft, Plus, Trash2, Upload, ChevronDown, ChevronUp, Download, ExternalLink,
 } from "lucide-react"
 import type {
   Currency, DealItem, DeliveryMethod, Incoterms, ImporterType, DeclarantType,
@@ -24,8 +24,8 @@ import { CURRENCY_SYMBOLS, permitDocLabels } from "@/lib/deal-types"
 import { calcDeal, fmtNum, toRub } from "@/lib/deal-calc"
 import { exportDealToExcel } from "@/lib/deal-export"
 
-interface ClientOption { companyName?: string }
-interface SupplierOption { nameRu?: string; nameEn?: string; nameZh?: string }
+interface ClientOption { id: number; companyName?: string; internalName?: string }
+interface SupplierOption { id: number; nameRu?: string; nameEn?: string; nameZh?: string }
 interface ProductOption {
   id: number
   article?: string
@@ -201,7 +201,16 @@ function DealFormPage() {
   const [status, setStatus] = useState<"draft" | "sent" | "approved" | "rejected">("draft")
   const [clientOptions, setClientOptions] = useState<string[]>([])
   const [supplierOptions, setSupplierOptions] = useState<string[]>([])
+  const [clientRecords, setClientRecords] = useState<ClientOption[]>([])
+  const [supplierRecords, setSupplierRecords] = useState<SupplierOption[]>([])
   const [catalogProducts, setCatalogProducts] = useState<ProductOption[]>([])
+  const [isClientImporter, setIsClientImporter] = useState(true)
+  const [importerClientName, setImporterClientName] = useState("")
+  const [isSupplierManufacturer, setIsSupplierManufacturer] = useState(true)
+  const [manufacturerSupplierName, setManufacturerSupplierName] = useState("")
+  const [editorSheetOpen, setEditorSheetOpen] = useState(false)
+  const [editorSheetUrl, setEditorSheetUrl] = useState("")
+  const [editorSheetTitle, setEditorSheetTitle] = useState("")
   const [isSaving, setIsSaving] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
 
@@ -215,6 +224,12 @@ function DealFormPage() {
     rates: true, client: true, items: true, delivery: true, customs: true, summary: true,
   })
   const toggle = (s: string) => setExpandedSections((prev) => ({ ...prev, [s]: !prev[s] }))
+
+  const openEntityEditor = useCallback((title: string, path: string) => {
+    setEditorSheetTitle(title)
+    setEditorSheetUrl(path)
+    setEditorSheetOpen(true)
+  }, [])
 
   useEffect(() => {
     fetch("https://www.cbr-xml-daily.ru/daily_json.js")
@@ -234,12 +249,16 @@ function DealFormPage() {
       fetch("/api/admin/products").then((r) => r.json()).catch(() => null),
     ]).then(([clientsRes, suppliersRes, productsRes]) => {
       if (clientsRes?.ok && Array.isArray(clientsRes.items)) {
-        setClientOptions(clientsRes.items.map((item: ClientOption & { internalName?: string }) => item.companyName || item.internalName || "").filter(Boolean))
+        const clientItems = clientsRes.items as ClientOption[]
+        setClientRecords(clientItems)
+        setClientOptions(clientItems.map((item) => item.companyName || item.internalName || "").filter(Boolean))
       }
       if (suppliersRes?.ok && Array.isArray(suppliersRes.items)) {
+        const supplierItems = suppliersRes.items as SupplierOption[]
+        setSupplierRecords(supplierItems)
         setSupplierOptions(
-          suppliersRes.items
-            .flatMap((item: SupplierOption) => [item.nameRu, item.nameEn, item.nameZh])
+          supplierItems
+            .flatMap((item) => [item.nameRu, item.nameEn, item.nameZh])
             .filter((name: string | undefined): name is string => Boolean(name))
         )
       }
@@ -277,6 +296,10 @@ function DealFormPage() {
         setDeliveryRussiaLocal(String(deal.deliveryRussiaLocal ?? ""))
         setDeliveryRussiaLocalCurrency(deal.deliveryRussiaLocalCurrency || "RUB")
         setImporter(deal.importer || "client")
+        setIsClientImporter(deal.isClientImporter !== false)
+        setImporterClientName(deal.importerClientName || "")
+        setIsSupplierManufacturer(deal.isSupplierManufacturer !== false)
+        setManufacturerSupplierName(deal.manufacturerSupplierName || "")
         setHasPermitDocs(Boolean(deal.hasPermitDocs))
         setCommissionPercent(String(deal.commissionPercent ?? ""))
         setDeclarant(deal.declarant || "our")
@@ -324,6 +347,10 @@ function DealFormPage() {
       deliveryRussiaLocal: parseFloat(deliveryRussiaLocal) || 0,
       deliveryRussiaLocalCurrency,
       importer,
+      isClientImporter,
+      importerClientName,
+      isSupplierManufacturer,
+      manufacturerSupplierName,
       hasPermitDocs,
       permitDocs: [],
       commissionPercent: parseFloat(commissionPercent) || 0,
@@ -353,7 +380,7 @@ function DealFormPage() {
       alert(result?.error || "Не удалось сохранить сделку")
     }
     setIsSaving(false)
-  }, [isNew, params.id, dealNumber, status, clientName, supplierName, cityFrom, cityTo, items, deliveryMethod, deliveryCostTotal, deliveryCostCurrency, deliveryCostBorder, deliveryCostBorderCurrency, deliveryCostRussia, deliveryCostRussiaCurrency, incoterms, deliveryChinaLocal, deliveryChinaLocalCurrency, deliveryRussiaLocal, deliveryRussiaLocalCurrency, importer, hasPermitDocs, commissionPercent, declarant, customsCostManual, commissionImporterUsd, swiftUsd, rates, notes])
+  }, [isNew, params.id, dealNumber, status, clientName, supplierName, cityFrom, cityTo, items, deliveryMethod, deliveryCostTotal, deliveryCostCurrency, deliveryCostBorder, deliveryCostBorderCurrency, deliveryCostRussia, deliveryCostRussiaCurrency, incoterms, deliveryChinaLocal, deliveryChinaLocalCurrency, deliveryRussiaLocal, deliveryRussiaLocalCurrency, importer, isClientImporter, importerClientName, isSupplierManufacturer, manufacturerSupplierName, hasPermitDocs, commissionPercent, declarant, customsCostManual, commissionImporterUsd, swiftUsd, rates, notes])
 
   const handleDeliveryBorderChange = useCallback((value: string) => {
     setDeliveryCostBorder(value)
@@ -388,7 +415,12 @@ function DealFormPage() {
     deliveryChinaLocalCurrency,
     deliveryRussiaLocal: parseFloat(deliveryRussiaLocal) || 0,
     deliveryRussiaLocalCurrency,
-    importer, hasPermitDocs, permitDocs: [],
+    importer,
+    isClientImporter,
+    importerClientName,
+    isSupplierManufacturer,
+    manufacturerSupplierName,
+    hasPermitDocs, permitDocs: [],
     commissionPercent: parseFloat(commissionPercent) || 0,
     declarant,
     customsCostManual: parseFloat(customsCostManual) || 0,
@@ -401,7 +433,7 @@ function DealFormPage() {
     deliveryCostRussia, deliveryCostRussiaCurrency,
     incoterms, deliveryChinaLocal, deliveryChinaLocalCurrency,
     deliveryRussiaLocal, deliveryRussiaLocalCurrency,
-    importer, hasPermitDocs, commissionPercent, declarant, customsCostManual,
+    importer, isClientImporter, importerClientName, isSupplierManufacturer, manufacturerSupplierName, hasPermitDocs, commissionPercent, declarant, customsCostManual,
     commissionImporterUsd, swiftUsd, rates, notes])
 
   const calc = useMemo(() => calcDeal(dealForCalc), [dealForCalc])
@@ -416,6 +448,16 @@ function DealFormPage() {
       )
       .slice(0, 8)
   }, [quickProductQuery, catalogProducts])
+
+  const selectedClientRecord = useMemo(() => {
+    const value = clientName.trim().toLowerCase()
+    return clientRecords.find((item) => ((item.companyName || item.internalName || "").trim().toLowerCase() === value))
+  }, [clientName, clientRecords])
+
+  const selectedSupplierRecord = useMemo(() => {
+    const value = supplierName.trim().toLowerCase()
+    return supplierRecords.find((item) => ([item.nameRu, item.nameEn, item.nameZh].some((name) => (name || "").trim().toLowerCase() === value)))
+  }, [supplierName, supplierRecords])
 
   /* --- item helpers --- */
   const updateItem = useCallback((tempId: string, patch: Partial<DealItem>) => {
@@ -516,13 +558,75 @@ function DealFormPage() {
         {expandedSections.client !== false && (
           <div className="space-y-4 px-4 pb-4 pt-2">
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <Label>Клиент</Label>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label>Клиент</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1 px-2 text-xs"
+                    onClick={() => openEntityEditor("Редактирование клиентов", selectedClientRecord?.id ? `/admin/clients?edit=${selectedClientRecord.id}` : "/admin/clients")}
+                  >
+                    <ExternalLink className="h-3 w-3" /> Редактировать
+                  </Button>
+                </div>
                 <AutoSelect value={clientName} onChange={setClientName} options={clientOptions} placeholder="Выберите или введите клиента" />
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={isClientImporter}
+                    onChange={(e) => setIsClientImporter(e.target.checked)}
+                    className="h-4 w-4 rounded border-border"
+                  />
+                  Импортер
+                </label>
+                {!isClientImporter && (
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Компания-импортер</Label>
+                    <AutoSelect
+                      value={importerClientName}
+                      onChange={setImporterClientName}
+                      options={clientOptions}
+                      placeholder="Выберите импортера из клиентов"
+                    />
+                  </div>
+                )}
               </div>
-              <div className="space-y-1">
-                <Label>Продавец</Label>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label>Продавец</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1 px-2 text-xs"
+                    onClick={() => openEntityEditor("Редактирование поставщиков", selectedSupplierRecord?.id ? `/admin/suppliers?edit=${selectedSupplierRecord.id}` : "/admin/suppliers")}
+                  >
+                    <ExternalLink className="h-3 w-3" /> Редактировать
+                  </Button>
+                </div>
                 <AutoSelect value={supplierName} onChange={setSupplierName} options={supplierOptions} placeholder="Выберите или введите продавца" />
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={isSupplierManufacturer}
+                    onChange={(e) => setIsSupplierManufacturer(e.target.checked)}
+                    className="h-4 w-4 rounded border-border"
+                  />
+                  Производитель
+                </label>
+                {!isSupplierManufacturer && (
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Производитель</Label>
+                    <AutoSelect
+                      value={manufacturerSupplierName}
+                      onChange={setManufacturerSupplierName}
+                      options={supplierOptions}
+                      placeholder="Выберите производителя из поставщиков"
+                    />
+                  </div>
+                )}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -619,8 +723,19 @@ function DealFormPage() {
                               onChange={(e) => { updateItem(it.tempId, { article: e.target.value }); applyProductSuggestion(it.tempId, e.target.value, "article") }} />
                           </TableCell>
                           <TableCell>
-                            <Input className="h-8 w-36 text-xs" value={it.nameRu}
-                              onChange={(e) => { updateItem(it.tempId, { nameRu: e.target.value }); applyProductSuggestion(it.tempId, e.target.value, "nameRu") }} />
+                            <div className="flex items-center gap-2">
+                              <Input className="h-8 w-36 text-xs" value={it.nameRu}
+                                onChange={(e) => { updateItem(it.tempId, { nameRu: e.target.value }); applyProductSuggestion(it.tempId, e.target.value, "nameRu") }} />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-8 px-2 text-xs"
+                                onClick={() => openEntityEditor("Редактирование товаров", it.productId ? `/admin/products?edit=${it.productId}` : "/admin/products")}
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                              </Button>
+                            </div>
                           </TableCell>
                           <TableCell>
                             <Input type="number" className="h-8 w-24 text-xs" value={it.quantity || ""}
@@ -1066,6 +1181,21 @@ function DealFormPage() {
           </div>
         )}
       </div>
+
+      <Sheet open={editorSheetOpen} onOpenChange={setEditorSheetOpen}>
+        <SheetContent className="w-[92vw] max-w-5xl p-0">
+          <SheetHeader className="border-b px-4 py-3">
+            <SheetTitle>{editorSheetTitle || "Редактирование"}</SheetTitle>
+          </SheetHeader>
+          <div className="h-[calc(100vh-72px)]">
+            {editorSheetUrl ? (
+              <iframe title={editorSheetTitle || "Редактор"} src={editorSheetUrl} className="h-full w-full border-0" />
+            ) : (
+              <div className="p-4 text-sm text-muted-foreground">Не удалось открыть редактор.</div>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* ======= Add from catalog sheet ======= */}
       <Sheet open={addSheetOpen} onOpenChange={setAddSheetOpen}>

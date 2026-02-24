@@ -664,9 +664,27 @@ function DealFormPage() {
                             <Input type="number" step="0.1" className="h-8 w-14 text-xs" value={it.antiDumping || ""}
                               onChange={(e) => updateItem(it.tempId, { antiDumping: parseFloat(e.target.value) || 0 })} />
                           </TableCell>
-                          <TableCell className="font-mono text-xs">{ic ? fmtNum(ic.dutyRub, 0) : "\u2014"}</TableCell>
-                          <TableCell className="font-mono text-xs">{ic ? fmtNum(ic.totalVolume, 4) : "\u2014"}</TableCell>
-                          <TableCell className="font-mono text-xs">{ic ? fmtNum(ic.totalWeight, 1) : "\u2014"}</TableCell>
+                          <TableCell className="font-mono text-xs">{ic ? fmtNum(ic.dutyRub, 0) : "—"}</TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              step="0.0001"
+                              className="h-8 w-24 text-xs"
+                              value={it.manualTotalVolume || ""}
+                              placeholder={ic ? fmtNum(ic.totalVolume, 4) : ""}
+                              onChange={(e) => updateItem(it.tempId, { manualTotalVolume: parseFloat(e.target.value) || 0 })}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              step="0.1"
+                              className="h-8 w-24 text-xs"
+                              value={it.manualTotalWeight || ""}
+                              placeholder={ic ? fmtNum(ic.totalWeight, 1) : ""}
+                              onChange={(e) => updateItem(it.tempId, { manualTotalWeight: parseFloat(e.target.value) || 0 })}
+                            />
+                          </TableCell>
                           <TableCell className="text-right font-mono text-xs">
                             {ic ? fmtNum(ic.totalPriceRub, 0) + " \u20BD" : "\u2014"}
                           </TableCell>

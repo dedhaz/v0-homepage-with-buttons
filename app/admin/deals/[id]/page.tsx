@@ -24,47 +24,26 @@ import { CURRENCY_SYMBOLS, permitDocLabels } from "@/lib/deal-types"
 import { calcDeal, fmtNum, toRub } from "@/lib/deal-calc"
 import { exportDealToExcel } from "@/lib/deal-export"
 
-/* ===== mock catalogues ===== */
-const clientList = ['ООО "Техно-Импорт"', "ИП Козлова А.М.", 'ООО "ГлобалТрейд"']
-const supplierList = [
-  "Шэньчжэнь Хуацян Электроникс",
-  "Гуанчжоу Байда Трейдинг",
-  "Иу Цзиньчэн Импорт Экспорт",
-]
-
-interface CatalogProduct {
+interface ClientOption { companyName?: string }
+interface SupplierOption { nameRu?: string; nameEn?: string; nameZh?: string }
+interface ProductOption {
   id: number
-  article: string
-  nameRu: string
-  tnved: string
-  photo: string
-  priceSale: number
-  priceCurrency: Currency
-  dutyPercent: number
-  vatPercent: number
-  excise: number
-  antiDumping: number
-  dimUnitL: number; dimUnitW: number; dimUnitH: number
-  weightBruttoUnit: number
-  dimPackageL: number; dimPackageW: number; dimPackageH: number
-  weightBruttoPackage: number
-  qtyInPackage: number
+  article?: string
+  nameRu?: string
+  photo?: string
+  tnved?: string
+  priceSale?: string | number
+  currencySale?: Currency
+  dutyPercent?: string | number
+  vatPercent?: string | number
+  excise?: string | number
+  antiDumping?: string | number
+  dimUnit?: { length?: string; width?: string; height?: string }
+  weightBruttoUnit?: string | number
+  dimPackage?: { length?: string; width?: string; height?: string }
+  weightBruttoPackage?: string | number
+  qtyInPackage?: string | number
 }
-
-const catalogProducts: CatalogProduct[] = [
-  {
-    id: 1, article: "LED-6060-W", nameRu: "Светодиодная панель 60x60", tnved: "9405 42 310 0",
-    photo: "", priceSale: 24, priceCurrency: "USD", dutyPercent: 6, vatPercent: 22, excise: 0, antiDumping: 0,
-    dimUnitL: 60, dimUnitW: 60, dimUnitH: 1.2, weightBruttoUnit: 3.2,
-    dimPackageL: 65, dimPackageW: 65, dimPackageH: 28, weightBruttoPackage: 16.5, qtyInPackage: 5,
-  },
-  {
-    id: 2, article: "CTN-PREM-001", nameRu: "Хлопковая ткань Premium", tnved: "5208 11 100 0",
-    photo: "", priceSale: 145, priceCurrency: "USD", dutyPercent: 8, vatPercent: 22, excise: 0, antiDumping: 0,
-    dimUnitL: 150, dimUnitW: 30, dimUnitH: 30, weightBruttoUnit: 13,
-    dimPackageL: 155, dimPackageW: 35, dimPackageH: 35, weightBruttoPackage: 14.5, qtyInPackage: 1,
-  },
-]
 
 /* ===== helpers ===== */
 function genTempId() { return Math.random().toString(36).slice(2, 10) }
@@ -79,16 +58,31 @@ function emptyDealItem(): DealItem {
   }
 }
 
-function itemFromCatalog(cp: CatalogProduct): DealItem {
+function itemFromProduct(cp: ProductOption): DealItem {
   return {
-    tempId: genTempId(), productId: cp.id, article: cp.article, nameRu: cp.nameRu,
-    photo: cp.photo, tnved: cp.tnved, description: "",
-    priceSale: cp.priceSale, priceCurrency: cp.priceCurrency, quantity: 1,
-    dutyPercent: cp.dutyPercent, vatPercent: cp.vatPercent, excise: cp.excise, antiDumping: cp.antiDumping,
-    dimUnitL: cp.dimUnitL, dimUnitW: cp.dimUnitW, dimUnitH: cp.dimUnitH,
-    weightBruttoUnit: cp.weightBruttoUnit,
-    dimPackageL: cp.dimPackageL, dimPackageW: cp.dimPackageW, dimPackageH: cp.dimPackageH,
-    weightBruttoPackage: cp.weightBruttoPackage, qtyInPackage: cp.qtyInPackage,
+    tempId: genTempId(),
+    productId: cp.id,
+    article: cp.article || "",
+    nameRu: cp.nameRu || "",
+    photo: cp.photo || "",
+    tnved: cp.tnved || "",
+    description: "",
+    priceSale: Number(cp.priceSale) || 0,
+    priceCurrency: cp.currencySale || "CNY",
+    quantity: 1,
+    dutyPercent: Number(cp.dutyPercent) || 0,
+    vatPercent: Number(cp.vatPercent) || 22,
+    excise: Number(cp.excise) || 0,
+    antiDumping: Number(cp.antiDumping) || 0,
+    dimUnitL: Number(cp.dimUnit?.length) || 0,
+    dimUnitW: Number(cp.dimUnit?.width) || 0,
+    dimUnitH: Number(cp.dimUnit?.height) || 0,
+    weightBruttoUnit: Number(cp.weightBruttoUnit) || 0,
+    dimPackageL: Number(cp.dimPackage?.length) || 0,
+    dimPackageW: Number(cp.dimPackage?.width) || 0,
+    dimPackageH: Number(cp.dimPackage?.height) || 0,
+    weightBruttoPackage: Number(cp.weightBruttoPackage) || 0,
+    qtyInPackage: Number(cp.qtyInPackage) || 0,
   }
 }
 
@@ -167,18 +161,8 @@ function DealFormPage() {
   const [cbUsd, setCbUsd] = useState(88.5)
   const [cbCny, setCbCny] = useState(12.2)
 
-  useEffect(() => {
-    fetch("https://www.cbr-xml-daily.ru/daily_json.js")
-      .then((r) => r.json())
-      .then((data) => {
-        setCbUsd(data?.Valute?.USD?.Value ?? 88.5)
-        setCbCny(data?.Valute?.CNY?.Value ?? 12.2)
-      })
-      .catch(() => {})
-  }, [])
-
   /* --- main form state --- */
-  const [dealNumber, setDealNumber] = useState(isNew ? "" : "КП-2026/001")
+  const [dealNumber, setDealNumber] = useState(isNew ? "" : "")
   const [clientName, setClientName] = useState(clientFromUrl)
   const [supplierName, setSupplierName] = useState("")
   const [cityFrom, setCityFrom] = useState("")
@@ -204,6 +188,12 @@ function DealFormPage() {
   const [commissionImporterUsd, setCommissionImporterUsd] = useState("")
   const [swiftUsd, setSwiftUsd] = useState("")
   const [notes, setNotes] = useState("")
+  const [status, setStatus] = useState<"draft" | "sent" | "approved" | "rejected">("draft")
+  const [clientOptions, setClientOptions] = useState<string[]>([])
+  const [supplierOptions, setSupplierOptions] = useState<string[]>([])
+  const [catalogProducts, setCatalogProducts] = useState<ProductOption[]>([])
+  const [isSaving, setIsSaving] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
 
   /* --- item add sheet --- */
   const [addSheetOpen, setAddSheetOpen] = useState(false)
@@ -215,12 +205,138 @@ function DealFormPage() {
   })
   const toggle = (s: string) => setExpandedSections((prev) => ({ ...prev, [s]: !prev[s] }))
 
+  useEffect(() => {
+    fetch("https://www.cbr-xml-daily.ru/daily_json.js")
+      .then((r) => r.json())
+      .then((data) => {
+        setCbUsd(data?.Valute?.USD?.Value ?? 88.5)
+        setCbCny(data?.Valute?.CNY?.Value ?? 12.2)
+      })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    setIsLoading(true)
+    Promise.all([
+      fetch("/api/admin/clients").then((r) => r.json()).catch(() => null),
+      fetch("/api/admin/suppliers").then((r) => r.json()).catch(() => null),
+      fetch("/api/admin/products").then((r) => r.json()).catch(() => null),
+    ]).then(([clientsRes, suppliersRes, productsRes]) => {
+      if (clientsRes?.ok && Array.isArray(clientsRes.items)) {
+        setClientOptions(clientsRes.items.map((item: ClientOption & { internalName?: string }) => item.companyName || item.internalName || "").filter(Boolean))
+      }
+      if (suppliersRes?.ok && Array.isArray(suppliersRes.items)) {
+        setSupplierOptions(
+          suppliersRes.items
+            .flatMap((item: SupplierOption) => [item.nameRu, item.nameEn, item.nameZh])
+            .filter((name: string | undefined): name is string => Boolean(name))
+        )
+      }
+      if (productsRes?.ok && Array.isArray(productsRes.items)) {
+        setCatalogProducts(productsRes.items)
+      }
+    }).finally(() => setIsLoading(false))
+  }, [])
+
+  useEffect(() => {
+    if (isNew) return
+    setIsLoading(true)
+    fetch(`/api/admin/deals/${params.id}`)
+      .then((response) => response.json())
+      .then((result) => {
+        if (!result?.ok || !result.item) return
+        const deal = result.item
+        setDealNumber(deal.number || "")
+        setClientName(deal.clientName || "")
+        setSupplierName(deal.supplierName || "")
+        setCityFrom(deal.cityFrom || "")
+        setCityTo(deal.cityTo || "")
+        setItems(Array.isArray(deal.items) ? deal.items : [])
+        setStatus(deal.status || "draft")
+        setDeliveryMethod(deal.deliveryMethod || "auto")
+        setDeliveryCostTotal(String(deal.deliveryCostTotal ?? ""))
+        setDeliveryCostCurrency(deal.deliveryCostCurrency || "USD")
+        setDeliveryCostBorder(String(deal.deliveryCostBorder ?? ""))
+        setDeliveryCostBorderCurrency(deal.deliveryCostBorderCurrency || "USD")
+        setDeliveryCostRussia(String(deal.deliveryCostRussia ?? ""))
+        setDeliveryCostRussiaCurrency(deal.deliveryCostRussiaCurrency || "RUB")
+        setIncoterms(deal.incoterms || "EXW")
+        setDeliveryChinaLocal(String(deal.deliveryChinaLocal ?? ""))
+        setDeliveryChinaLocalCurrency(deal.deliveryChinaLocalCurrency || "CNY")
+        setDeliveryRussiaLocal(String(deal.deliveryRussiaLocal ?? ""))
+        setDeliveryRussiaLocalCurrency(deal.deliveryRussiaLocalCurrency || "RUB")
+        setImporter(deal.importer || "client")
+        setHasPermitDocs(Boolean(deal.hasPermitDocs))
+        setCommissionPercent(String(deal.commissionPercent ?? ""))
+        setDeclarant(deal.declarant || "our")
+        setCustomsCostManual(String(deal.customsCostManual ?? ""))
+        setCommissionImporterUsd(String(deal.commissionImporterUsd ?? ""))
+        setSwiftUsd(String(deal.swiftUsd ?? ""))
+        setNotes(deal.notes || "")
+      })
+      .finally(() => setIsLoading(false))
+  }, [isNew, params.id])
+
   /* --- calculation --- */
   const rates = useMemo(() => ({
     usd: parseFloat(rateUsd) || 88.5,
     cny: parseFloat(rateCny) || 12.2,
     cbUsd, cbCny,
   }), [rateUsd, rateCny, cbUsd, cbCny])
+
+  const saveDraft = useCallback(async () => {
+    setIsSaving(true)
+    const payload = {
+      number: dealNumber || `КП-${new Date().toISOString().slice(0, 10)}-${Date.now().toString().slice(-4)}`,
+      status,
+      clientName,
+      supplierName,
+      cityFrom,
+      cityTo,
+      items,
+      deliveryMethod,
+      deliveryCostTotal: parseFloat(deliveryCostTotal) || 0,
+      deliveryCostCurrency,
+      deliveryCostBorder: parseFloat(deliveryCostBorder) || 0,
+      deliveryCostBorderCurrency,
+      deliveryCostRussia: parseFloat(deliveryCostRussia) || 0,
+      deliveryCostRussiaCurrency,
+      incoterms,
+      deliveryChinaLocal: parseFloat(deliveryChinaLocal) || 0,
+      deliveryChinaLocalCurrency,
+      deliveryRussiaLocal: parseFloat(deliveryRussiaLocal) || 0,
+      deliveryRussiaLocalCurrency,
+      importer,
+      hasPermitDocs,
+      permitDocs: [],
+      commissionPercent: parseFloat(commissionPercent) || 0,
+      declarant,
+      customsCostManual: parseFloat(customsCostManual) || 0,
+      commissionImporterUsd: parseFloat(commissionImporterUsd) || 0,
+      swiftUsd: parseFloat(swiftUsd) || 0,
+      rates,
+      notes,
+    }
+
+    const endpoint = isNew ? "/api/admin/deals" : `/api/admin/deals/${params.id}`
+    const method = isNew ? "POST" : "PUT"
+    const response = await fetch(endpoint, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+    const result = await response.json().catch(() => null)
+    if (result?.ok) {
+      if (isNew && result.id) {
+        window.location.href = `/admin/deals/${result.id}`
+        return
+      }
+      if (!dealNumber) setDealNumber(payload.number)
+    } else {
+      alert(result?.error || "Не удалось сохранить сделку")
+    }
+    setIsSaving(false)
+  }, [isNew, params.id, dealNumber, status, clientName, supplierName, cityFrom, cityTo, items, deliveryMethod, deliveryCostTotal, deliveryCostCurrency, deliveryCostBorder, deliveryCostBorderCurrency, deliveryCostRussia, deliveryCostRussiaCurrency, incoterms, deliveryChinaLocal, deliveryChinaLocalCurrency, deliveryRussiaLocal, deliveryRussiaLocalCurrency, importer, hasPermitDocs, commissionPercent, declarant, customsCostManual, commissionImporterUsd, swiftUsd, rates, notes])
 
   const dealForCalc = useMemo(() => ({
     id: 0, number: dealNumber, createdAt: "", status: "draft" as const,
@@ -296,8 +412,8 @@ function DealFormPage() {
             {isNew ? "Новая сделка" : "Сделка " + dealNumber}
           </h1>
         </div>
-        <Button variant="outline" className="gap-2" onClick={() => {/* save draft */}}>
-          Сохранить черновик
+        <Button variant="outline" className="gap-2" onClick={saveDraft} disabled={isSaving || isLoading}>
+          {isSaving ? "Сохраняем..." : "Сохранить черновик"}
         </Button>
       </div>
 
@@ -330,11 +446,11 @@ function DealFormPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
                 <Label>Клиент</Label>
-                <AutoSelect value={clientName} onChange={setClientName} options={clientList} placeholder="Выберите или введите клиента" />
+                <AutoSelect value={clientName} onChange={setClientName} options={clientOptions} placeholder="Выберите или введите клиента" />
               </div>
               <div className="space-y-1">
                 <Label>Продавец</Label>
-                <AutoSelect value={supplierName} onChange={setSupplierName} options={supplierList} placeholder="Выберите или введите продавца" />
+                <AutoSelect value={supplierName} onChange={setSupplierName} options={supplierOptions} placeholder="Выберите или введите продавца" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -835,18 +951,18 @@ function DealFormPage() {
                 type="button"
                 className="flex w-full items-center gap-4 rounded-lg border border-border p-3 text-left transition-colors hover:bg-accent"
                 onClick={() => {
-                  setItems((prev) => [...prev, itemFromCatalog(cp)])
+                  setItems((prev) => [...prev, itemFromProduct(cp)])
                   setAddSheetOpen(false)
                 }}
               >
                 <div className="flex h-12 w-12 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">
-                  {cp.photo ? <img src={cp.photo} alt="" className="h-full w-full object-cover rounded-md" /> : cp.article.slice(0, 3)}
+                  {cp.photo ? <img src={cp.photo} alt="" className="h-full w-full object-cover rounded-md" /> : (cp.article || "ТОВ").slice(0, 3)}
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-medium text-foreground">{cp.nameRu}</p>
                   <p className="text-xs text-muted-foreground">{cp.article + " \u00B7 " + cp.tnved}</p>
                 </div>
-                <p className="font-mono text-sm">{cp.priceSale + " " + CURRENCY_SYMBOLS[cp.priceCurrency]}</p>
+                <p className="font-mono text-sm">{cp.priceSale + " " + CURRENCY_SYMBOLS[cp.currencySale || "CNY"]}</p>
               </button>
             ))}
           </div>

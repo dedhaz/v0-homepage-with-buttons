@@ -15,12 +15,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -237,6 +231,7 @@ export default function ClientsPage() {
   const [isInnLookupLoading, setIsInnLookupLoading] = useState(false)
   const [isBikLookupLoading, setIsBikLookupLoading] = useState(false)
   const [open, setOpen] = useState(false)
+  const [activeClientSection, setActiveClientSection] = useState<"about" | "contacts" | "extra" | "requisites" | "pricing" | "access">("about")
   const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState<Omit<Client, "id" | "createdAt">>({ ...emptyClient, address: { ...emptyAddress } })
 
@@ -253,17 +248,6 @@ export default function ClientsPage() {
   const focusId = Number(searchParams.get("focus") || 0)
   const editIdFromQuery = Number(searchParams.get("edit") || 0)
 
-
-  useEffect(() => {
-    fetch("/api/admin/clients")
-      .then((response) => response.json())
-      .then((result) => {
-        if (result?.ok && Array.isArray(result.items)) {
-          setClients(result.items)
-        }
-      })
-      .catch(() => {})
-  }, [])
 
   useEffect(() => {
     fetch("/api/admin/clients")
@@ -333,6 +317,7 @@ export default function ClientsPage() {
   function openNew() {
     setEditingId(null)
     setForm({ ...emptyClient, contracts: [], address: { ...emptyAddress } })
+    setActiveClientSection("about")
     setOpen(true)
   }
 
@@ -340,6 +325,7 @@ export default function ClientsPage() {
     setEditingId(client.id)
     const { id: _id, createdAt: _ca, ...rest } = client
     setForm({ ...rest, shortName: client.shortName || client.companyName || "", fullName: client.fullName || "", contracts: client.contracts.map((c) => ({ ...c })), address: { ...client.address } })
+    setActiveClientSection("about")
     setOpen(true)
   }
 
@@ -625,272 +611,171 @@ export default function ClientsPage() {
       </div>
 
       {/* sheet form */}
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
-          <SheetHeader>
-            <SheetTitle className="font-display">
-              {editingId !== null ? `Редактирование клиента #${editingId}` : "Новый клиент"}
-            </SheetTitle>
-          </SheetHeader>
-
-          <div className="mt-6 space-y-8">
-            {/* --- main --- */}
-            <section className="space-y-4">
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Основное</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Тип</Label>
-                  <Select value={form.type} onValueChange={(v) => updateField("type", v as "ИП" | "ООО")}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ИП">ИП</SelectItem>
-                      <SelectItem value="ООО">ООО</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Статус</Label>
-                  <Select value={form.status} onValueChange={(v) => updateField("status", v as Client["status"])}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="calc">Расчет</SelectItem>
-                      <SelectItem value="active">Активный</SelectItem>
-                      <SelectItem value="inactive">Неактивный</SelectItem>
-                      <SelectItem value="blacklist">Черный список</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Название для нас (внутреннее)</Label>
-                <Input value={form.internalName} onChange={(e) => updateField("internalName", e.target.value)} placeholder="Любое название, видно только админам" />
-              </div>
-            </section>
-
-            {/* --- contracts --- */}
-            <section className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Договоры</h3>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-1"
-                  onClick={() => setForm((prev) => ({ ...prev, contracts: [...prev.contracts, { ...emptyContract }] }))}
-                >
-                  <Plus className="h-3 w-3" />
-                  Добавить
+      {open && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-background px-4 py-4 md:px-6">
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Button className="bg-lime-500 text-black hover:bg-lime-400" onClick={handleSave} disabled={isSaving}>
+                  {isSaving ? "Сохраняем..." : "Сохранить"}
                 </Button>
+                <Button variant="outline" onClick={() => setOpen(false)}>Закрыть</Button>
               </div>
-              {form.contracts.length === 0 && (
-                <p className="text-sm text-muted-foreground">Договоры не добавлены</p>
-              )}
-              {form.contracts.map((ct, idx) => (
-                <div key={idx} className="rounded-lg border border-border p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-muted-foreground">{"Договор #" + (idx + 1)}</span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-destructive hover:text-destructive"
-                      onClick={() => setForm((prev) => ({ ...prev, contracts: prev.contracts.filter((_, i) => i !== idx) }))}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="space-y-1">
-                      <Label className="text-xs">{"N\u00B0 договора"}</Label>
-                      <Input
-                        value={ct.number}
-                        onChange={(e) => {
-                          const next = [...form.contracts]
-                          next[idx] = { ...next[idx], number: e.target.value }
-                          setForm((prev) => ({ ...prev, contracts: next }))
-                        }}
-                        placeholder="ВЭД-2026/001"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Тип</Label>
-                      <select
-                        value={ct.type}
-                        onChange={(e) => {
-                          const next = [...form.contracts]
-                          next[idx] = { ...next[idx], type: e.target.value as ContractType }
-                          setForm((prev) => ({ ...prev, contracts: next }))
-                        }}
-                        className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                      >
-                        <option value="supply">Поставки</option>
-                        <option value="commission">Комиссии</option>
-                        <option value="transport">Перевозки</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Дата</Label>
-                      <Input
-                        type="date"
-                        value={ct.date}
-                        onChange={(e) => {
-                          const next = [...form.contracts]
-                          next[idx] = { ...next[idx], date: e.target.value }
-                          setForm((prev) => ({ ...prev, contracts: next }))
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </section>
+              <div className="text-right text-sm text-muted-foreground">
+                <p>Изменения: текущий пользователь</p>
+                <p>{new Date().toLocaleString("ru-RU")}</p>
+              </div>
+            </div>
 
-            {/* --- requisites --- */}
-            <section className="space-y-4">
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Реквизиты</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>ИНН</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      value={form.inn}
-                      onChange={(e) => updateField("inn", e.target.value)}
-                      onBlur={lookupCompanyByInn}
-                      placeholder="7707123456"
-                    />
-                    <Button type="button" variant="outline" onClick={lookupCompanyByInn} disabled={isInnLookupLoading}>
-                      Заполнить по ИНН
-                    </Button>
-                  </div>
-                  {isInnLookupLoading && <p className="text-xs text-muted-foreground">Поиск компании по ИНН...</p>}
+            <div className="space-y-2">
+              <Label className="text-sm">* Наименование</Label>
+              <Input
+                className="h-14 max-w-4xl text-5 font-semibold"
+                value={form.shortName || form.companyName}
+                onChange={(e) => {
+                  updateField("shortName", e.target.value)
+                  updateField("companyName", e.target.value)
+                }}
+                placeholder="Название контрагента"
+              />
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
+              <div className="space-y-3">
+                {[
+                  ["about", "О контрагенте"],
+                  ["contacts", "Контактные лица"],
+                  ["extra", "Дополнительные поля"],
+                  ["requisites", "Реквизиты"],
+                  ["pricing", "Скидки и цены"],
+                  ["access", "Доступ"],
+                ].map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setActiveClientSection(key as typeof activeClientSection)}
+                    className={`flex w-full items-center justify-between rounded-md border px-5 py-4 text-left font-semibold ${activeClientSection === key ? "bg-muted text-foreground" : "bg-card text-muted-foreground"}`}
+                  >
+                    <span>{label}</span>
+                    <span>▸</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-5 overflow-hidden rounded-md border">
+                  {['События', 'Задачи', 'Документы', 'Файлы', 'Показатели'].map((tab, idx) => (
+                    <div key={tab} className={`border-r px-4 py-3 text-center text-base ${idx === 2 ? 'bg-blue-600 text-white' : 'bg-muted'} ${idx===4?'border-r-0':''}`}>{tab}</div>
+                  ))}
                 </div>
-                {form.type === "ООО" && (
-                  <div className="space-y-2">
-                    <Label>КПП</Label>
-                    <Input value={form.kpp} onChange={(e) => updateField("kpp", e.target.value)} placeholder="770701001" />
+
+                {(activeClientSection === "about" || activeClientSection === "requisites") && (
+                  <div className="rounded-lg border bg-card p-5 space-y-6">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>Тип контрагента</Label>
+                        <Select value={form.type} onValueChange={(v: Client["type"]) => updateField("type", v)}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="ООО">ООО</SelectItem>
+                            <SelectItem value="ИП">ИП</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Статус</Label>
+                        <Select value={form.status} onValueChange={(v: Client["status"]) => updateField("status", v)}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="calc">Расчет</SelectItem>
+                            <SelectItem value="active">Активный</SelectItem>
+                            <SelectItem value="inactive">Неактивный</SelectItem>
+                            <SelectItem value="blacklist">Черный список</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>ИНН</Label>
+                        <div className="flex gap-2">
+                          <Input value={form.inn} onChange={(e) => updateField("inn", e.target.value)} onBlur={lookupCompanyByInn} placeholder="7707123456" />
+                          <Button type="button" variant="outline" onClick={lookupCompanyByInn} disabled={isInnLookupLoading}>Заполнить по ИНН</Button>
+                        </div>
+                      </div>
+                      {form.type === "ООО" ? (
+                        <div className="space-y-2"><Label>КПП</Label><Input value={form.kpp} onChange={(e) => updateField("kpp", e.target.value)} /></div>
+                      ) : <div />}
+                      <div className="space-y-2"><Label>ОГРН</Label><Input value={form.ogrn} onChange={(e) => updateField("ogrn", e.target.value)} /></div>
+                      <div className="space-y-2"><Label>Внутреннее название</Label><Input value={form.internalName} onChange={(e) => updateField("internalName", e.target.value)} /></div>
+                    </div>
+
+                    <div className="space-y-2"><Label>Полное название</Label><Input value={form.fullName || ''} onChange={(e) => updateField('fullName', e.target.value)} /></div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="space-y-2"><Label>E-mail</Label><Input type="email" value={form.email} onChange={(e) => updateField("email", e.target.value)} /></div>
+                      <div className="space-y-2"><Label>Телефон</Label><Input value={form.phone} onChange={(e) => updateField("phone", e.target.value)} /></div>
+                      <div className="space-y-2"><Label>Telegram</Label><Input value={form.telegram} onChange={(e) => updateField("telegram", e.target.value)} /></div>
+                      <div className="space-y-2"><Label>WeChat</Label><Input value={form.wechat} onChange={(e) => updateField("wechat", e.target.value)} /></div>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <div className="space-y-2"><Label>БИК</Label><Input value={form.bik} onChange={(e) => updateField("bik", e.target.value)} onBlur={lookupBankByBik} /></div>
+                      <div className="space-y-2 md:col-span-2"><Label>Банк</Label><Input value={form.bankName} onChange={(e) => updateField("bankName", e.target.value)} /></div>
+                      <div className="space-y-2"><Label>Корр. счет</Label><Input value={form.ks} onChange={(e) => updateField("ks", e.target.value)} /></div>
+                      <div className="space-y-2 md:col-span-2"><Label>Расчетный счет</Label><Input value={form.rs} onChange={(e) => updateField("rs", e.target.value)} /></div>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <div className="space-y-2"><Label>Индекс</Label><Input value={form.address.index} onChange={(e) => updateAddress("index", e.target.value)} /></div>
+                      <div className="space-y-2"><Label>Область</Label><Input value={form.address.region} onChange={(e) => updateAddress("region", e.target.value)} /></div>
+                      <div className="space-y-2"><Label>Город</Label><Input value={form.address.city} onChange={(e) => updateAddress("city", e.target.value)} /></div>
+                      <div className="space-y-2"><Label>Улица</Label><Input value={form.address.street} onChange={(e) => updateAddress("street", e.target.value)} /></div>
+                      <div className="space-y-2"><Label>Дом</Label><Input value={form.address.house} onChange={(e) => updateAddress("house", e.target.value)} /></div>
+                      <div className="space-y-2"><Label>Офис</Label><Input value={form.address.office} onChange={(e) => updateAddress("office", e.target.value)} /></div>
+                    </div>
+
+                    <div className="space-y-2"><Label>Комментарий</Label><Textarea value={form.comment} onChange={(e) => updateField("comment", e.target.value)} className="min-h-[110px]" /></div>
                   </div>
                 )}
-                <div className="space-y-2">
-                  <Label>ОГРН</Label>
-                  <Input value={form.ogrn} onChange={(e) => updateField("ogrn", e.target.value)} placeholder="1027700132195" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Полное название</Label>
-                  <Input value={form.fullName || ""} onChange={(e) => updateField("fullName", e.target.value)} placeholder='ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ "КОМПАНИЯ"' />
-                </div>
-                <div className="space-y-2">
-                  <Label>Короткое название</Label>
-                  <Input value={form.shortName || form.companyName} onChange={(e) => { updateField("shortName", e.target.value); updateField("companyName", e.target.value) }} placeholder='ООО "Компания" / ИП Фамилия И.О.' />
-                </div>
+
+                {activeClientSection === "contacts" && (
+                  <div className="rounded-lg border bg-card p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-semibold">Договоры и контакты</h3>
+                      <Button type="button" variant="outline" onClick={() => setForm((prev) => ({ ...prev, contracts: [...prev.contracts, { ...emptyContract }] }))}>+ Договор</Button>
+                    </div>
+                    {form.contracts.length === 0 && <p className="text-sm text-muted-foreground">Нет добавленных договоров.</p>}
+                    {form.contracts.map((ct, idx) => (
+                      <div key={idx} className="grid gap-3 rounded-md border p-3 md:grid-cols-[1fr_220px_180px_auto]">
+                        <Input value={ct.number} onChange={(e)=>{ const next=[...form.contracts]; next[idx]={...next[idx], number:e.target.value}; setForm((prev)=>({...prev, contracts:next}))}} placeholder="Номер договора" />
+                        <Select value={ct.type} onValueChange={(v: ContractType)=>{ const next=[...form.contracts]; next[idx]={...next[idx], type:v}; setForm((prev)=>({...prev, contracts:next}))}}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="supply">Поставки</SelectItem>
+                            <SelectItem value="commission">Комиссии</SelectItem>
+                            <SelectItem value="transport">Перевозки</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Input type="date" value={ct.date} onChange={(e)=>{ const next=[...form.contracts]; next[idx]={...next[idx], date:e.target.value}; setForm((prev)=>({...prev, contracts:next}))}} />
+                        <Button type="button" variant="ghost" className="text-destructive" onClick={()=>setForm((prev)=>({...prev, contracts: prev.contracts.filter((_,i)=>i!==idx)}))}>Удалить</Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {activeClientSection !== "about" && activeClientSection !== "requisites" && activeClientSection !== "contacts" && (
+                  <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
+                    Раздел «{activeClientSection}» пока в разработке. Основные данные клиента доступны в разделах «О контрагенте», «Реквизиты» и «Контактные лица».
+                  </div>
+                )}
               </div>
-            </section>
-
-            {/* --- bank --- */}
-            <section className="space-y-4">
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Банковские реквизиты</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>БИК</Label>
-                  <Input
-                    value={form.bik}
-                    onChange={(e) => updateField("bik", e.target.value)}
-                    onBlur={lookupBankByBik}
-                    placeholder="044525225"
-                  />
-                  {isBikLookupLoading && <p className="text-xs text-muted-foreground">Поиск банка по БИК...</p>}
-                </div>
-                <div className="space-y-2">
-                  <Label>Название банка</Label>
-                  <Input value={form.bankName} onChange={(e) => updateField("bankName", e.target.value)} placeholder="ПАО Сбербанк" />
-                </div>
-                <div className="space-y-2">
-                  <Label>{"К/С"}</Label>
-                  <Input value={form.ks} onChange={(e) => updateField("ks", e.target.value)} placeholder="30101810400000000225" />
-                </div>
-                <div className="space-y-2">
-                  <Label>{"Р/С"}</Label>
-                  <Input value={form.rs} onChange={(e) => updateField("rs", e.target.value)} placeholder="40702810938000012345" />
-                </div>
-              </div>
-            </section>
-
-            {/* --- address --- */}
-            <section className="space-y-4">
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Адрес</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Индекс</Label>
-                  <Input value={form.address.index} onChange={(e) => updateAddress("index", e.target.value)} placeholder="101000" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Область</Label>
-                  <Input value={form.address.region} onChange={(e) => updateAddress("region", e.target.value)} placeholder="Московская обл." />
-                </div>
-                <div className="space-y-2">
-                  <Label>Город</Label>
-                  <Input value={form.address.city} onChange={(e) => updateAddress("city", e.target.value)} placeholder="Москва" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Улица</Label>
-                  <Input value={form.address.street} onChange={(e) => updateAddress("street", e.target.value)} placeholder="Мясницкая" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Дом</Label>
-                  <Input value={form.address.house} onChange={(e) => updateAddress("house", e.target.value)} placeholder="11" />
-                </div>
-                <div className="space-y-2">
-                  <Label>{"Квартира / Офис"}</Label>
-                  <Input value={form.address.office} onChange={(e) => updateAddress("office", e.target.value)} placeholder="305" />
-                </div>
-              </div>
-            </section>
-
-            {/* --- contacts --- */}
-            <section className="space-y-4">
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Контакты</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>E-mail</Label>
-                  <Input type="email" value={form.email} onChange={(e) => updateField("email", e.target.value)} placeholder="client@company.ru" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Телефон</Label>
-                  <Input value={form.phone} onChange={(e) => updateField("phone", e.target.value)} placeholder="+7 (999) 123-45-67" />
-                </div>
-                <div className="space-y-2">
-                  <Label>WeChat</Label>
-                  <Input value={form.wechat} onChange={(e) => updateField("wechat", e.target.value)} placeholder="wechat_id" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Telegram</Label>
-                  <Input value={form.telegram} onChange={(e) => updateField("telegram", e.target.value)} placeholder="@username" />
-                </div>
-              </div>
-            </section>
-
-            {/* --- comment --- */}
-            <section className="space-y-4">
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Внутренний комментарий</h3>
-              <Textarea
-                value={form.comment}
-                onChange={(e) => updateField("comment", e.target.value)}
-                placeholder="Информация о клиенте для внутреннего использования..."
-                className="min-h-24"
-              />
-            </section>
-
-            {/* --- actions --- */}
-            <div className="flex gap-3 border-t border-border pt-6">
-              <Button onClick={handleSave} className="flex-1" disabled={isSaving}>
-                {isSaving ? "Сохраняем..." : editingId !== null ? "Сохранить" : "Добавить клиента"}
-              </Button>
-              <Button variant="outline" onClick={() => setOpen(false)} className="flex-1">
-                Отмена
-              </Button>
             </div>
           </div>
-        </SheetContent>
-      </Sheet>
+        </div>
+      )}
+
     </div>
   )
 }

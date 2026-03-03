@@ -55,6 +55,8 @@ export interface DealItem {
   dimPackageH: number
   weightBruttoPackage: number
   qtyInPackage: number // 0 = no package info
+  manualTotalVolume?: number // manual volume override in m3
+  manualTotalWeight?: number // manual weight override in kg
 }
 
 export interface Deal {
@@ -80,6 +82,10 @@ export interface Deal {
   deliveryRussiaLocal: number
   deliveryRussiaLocalCurrency: Currency
   importer: ImporterType
+  isClientImporter?: boolean
+  importerClientName?: string
+  isSupplierManufacturer?: boolean
+  manufacturerSupplierName?: string
   hasPermitDocs: boolean
   permitDocs: { name: string; url: string }[]
   commissionPercent: number // importer commission %

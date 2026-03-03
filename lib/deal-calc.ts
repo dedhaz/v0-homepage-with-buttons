@@ -1,7 +1,5 @@
 import type { Deal, DealItem, DealRates, Currency } from "./deal-types"
 
-/* ======= Helpers ======= */
-
 export function toRub(amount: number, currency: Currency, rates: DealRates): number {
   if (currency === "RUB") return amount
   if (currency === "USD") return amount * rates.usd
@@ -12,7 +10,6 @@ export function fmtNum(n: number, decimals = 2): string {
   return n.toLocaleString("ru-RU", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
 }
 
-/* Volume of one unit in m3 (from cm) */
 function unitVolume(item: DealItem): number {
   const l = item.dimUnitL
   const w = item.dimUnitW
@@ -21,7 +18,6 @@ function unitVolume(item: DealItem): number {
   return (l * w * h) / 1_000_000
 }
 
-/* Volume of one package in m3 (from cm) */
 function packageVolume(item: DealItem): number {
   const l = item.dimPackageL
   const w = item.dimPackageW
@@ -30,22 +26,31 @@ function packageVolume(item: DealItem): number {
   return (l * w * h) / 1_000_000
 }
 
-/* ======= Per-item calculations ======= */
+function calcCustomsFee2026(customsValueRub: number) {
+  if (customsValueRub <= 200_000) return 1231
+  if (customsValueRub <= 450_000) return 2462
+  if (customsValueRub <= 1_200_000) return 4924
+  if (customsValueRub <= 2_700_000) return 13_541
+  if (customsValueRub <= 4_200_000) return 18_465
+  if (customsValueRub <= 5_500_000) return 21_344
+  if (customsValueRub <= 10_000_000) return 49_240
+  return 73_860
+}
 
 export interface ItemCalc {
   item: DealItem
-  totalPriceOriginal: number // price * qty in original currency
+  totalPriceOriginal: number
   totalPriceRub: number
-  totalVolume: number // m3
-  totalWeight: number // kg brutto
-  deliveryShareRub: number // delivery allocated to this item
-  dutyBaseRub: number // (item cost + china local delivery share) in RUB
-  dutyRub: number // dutyBase * dutyPercent
+  totalVolume: number
+  totalWeight: number
+  deliveryShareRub: number
+  dutyBaseRub: number
+  dutyRub: number
   exciseRub: number
   antiDumpingRub: number
-  vatBaseRub: number // (item cost + delivery + duty + excise + antiDumping)
+  vatBaseRub: number
   vatRub: number
-  customsTotal: number // duty + vat + excise + antiDumping
+  customsTotal: number
 }
 
 export interface DealCalcResult {
@@ -57,15 +62,17 @@ export interface DealCalcResult {
   deliveryTotalRub: number
   deliveryChinaLocalRub: number
   deliveryRussiaLocalRub: number
-  customsFee: number // 25000 base or manual
+  customsFee: number
+  declarationFee: number
   totalDuty: number
   totalVat: number
+  dutyByTnved: Array<{ tnved: string; amount: number }>
   totalExcise: number
   totalAntiDumping: number
-  totalCustomsPayments: number // duty + vat + excise + antiDumping
-  invoiceCommissionRub: number // importer commission on invoice
+  totalCustomsPayments: number
+  invoiceCommissionRub: number
   invoiceCommissionOriginal: number
-  commissionImporterRub: number // flat $ commission
+  commissionImporterRub: number
   swiftRub: number
   grandTotal: number
 }
@@ -73,25 +80,33 @@ export interface DealCalcResult {
 export function calcDeal(deal: Deal): DealCalcResult {
   const rates = deal.rates
 
-  /* --- per-item volume & weight --- */
   const itemCalcs: ItemCalc[] = deal.items.map((item) => {
     const totalPriceOriginal = item.priceSale * item.quantity
     const totalPriceRub = toRub(totalPriceOriginal, item.priceCurrency, rates)
 
-    let totalVolume: number
-    let totalWeight: number
+    let totalVolume = 0
+    let totalWeight = 0
 
-    const hasPackageInfo = item.qtyInPackage > 0 && packageVolume(item) > 0
+    const hasPackageInfo =
+      item.qtyInPackage > 0 &&
+      packageVolume(item) > 0 &&
+      item.weightBruttoPackage > 0
+
     if (hasPackageInfo) {
-      // calculate by packages
       const packages = Math.ceil(item.quantity / item.qtyInPackage)
       totalVolume = packages * packageVolume(item)
       totalWeight = packages * item.weightBruttoPackage
     } else {
-      // per-unit calc: volume * 1.2
       const uVol = unitVolume(item)
-      totalVolume = uVol > 0 ? uVol * item.quantity * 1.2 : 0
-      totalWeight = item.weightBruttoUnit * item.quantity
+      totalVolume = uVol > 0 ? uVol * item.quantity * 1.25 : 0
+      totalWeight = item.weightBruttoUnit > 0 ? item.weightBruttoUnit * item.quantity * 1.1 : 0
+    }
+
+    if ((item.manualTotalVolume || 0) > 0) {
+      totalVolume = item.manualTotalVolume || 0
+    }
+    if ((item.manualTotalWeight || 0) > 0) {
+      totalWeight = item.manualTotalWeight || 0
     }
 
     return {
@@ -111,18 +126,15 @@ export function calcDeal(deal: Deal): DealCalcResult {
     }
   })
 
-  /* --- totals --- */
   const totalVolume = itemCalcs.reduce((s, ic) => s + ic.totalVolume, 0)
   const totalWeight = itemCalcs.reduce((s, ic) => s + ic.totalWeight, 0)
   const totalGoodsRub = itemCalcs.reduce((s, ic) => s + ic.totalPriceRub, 0)
   const totalGoodsOriginal = itemCalcs.reduce((s, ic) => s + ic.totalPriceOriginal, 0)
 
-  /* --- delivery --- */
   const deliveryTotalRub = toRub(deal.deliveryCostTotal, deal.deliveryCostCurrency, rates)
   const deliveryChinaLocalRub = toRub(deal.deliveryChinaLocal, deal.deliveryChinaLocalCurrency, rates)
   const deliveryRussiaLocalRub = toRub(deal.deliveryRussiaLocal, deal.deliveryRussiaLocalCurrency, rates)
 
-  /* --- distribute delivery to items by volume, weight, or cost --- */
   for (const ic of itemCalcs) {
     if (totalVolume > 0) {
       ic.deliveryShareRub = deliveryTotalRub * (ic.totalVolume / totalVolume)
@@ -133,9 +145,7 @@ export function calcDeal(deal: Deal): DealCalcResult {
     }
   }
 
-  /* --- customs per item --- */
   for (const ic of itemCalcs) {
-    // distribute china local delivery similarly
     let chinaDeliveryShare = 0
     if (totalVolume > 0) {
       chinaDeliveryShare = deliveryChinaLocalRub * (ic.totalVolume / totalVolume)
@@ -145,20 +155,16 @@ export function calcDeal(deal: Deal): DealCalcResult {
       chinaDeliveryShare = deliveryChinaLocalRub * (ic.totalPriceRub / totalGoodsRub)
     }
 
-    // duty base: (goods cost + china local delivery) in RUB
+    // (общая стоимость + доставка по Китаю) * пошлина
     ic.dutyBaseRub = ic.totalPriceRub + chinaDeliveryShare
     ic.dutyRub = ic.dutyBaseRub * (ic.item.dutyPercent / 100)
 
-    // excise
-    ic.exciseRub = ic.item.excise * ic.item.quantity
-
-    // anti-dumping
-    ic.antiDumpingRub = ic.dutyBaseRub * (ic.item.antiDumping / 100)
-
-    // VAT base: goods + delivery share + duty + excise + antiDumping
-    ic.vatBaseRub = ic.totalPriceRub + ic.deliveryShareRub + ic.dutyRub + ic.exciseRub + ic.antiDumpingRub
+    // (стоимость товара + доставка по Китаю + пошлина) * НДС
+    ic.vatBaseRub = ic.totalPriceRub + chinaDeliveryShare + ic.dutyRub
     ic.vatRub = ic.vatBaseRub * (ic.item.vatPercent / 100)
 
+    ic.exciseRub = ic.item.excise * ic.item.quantity
+    ic.antiDumpingRub = ic.dutyBaseRub * (ic.item.antiDumping / 100)
     ic.customsTotal = ic.dutyRub + ic.vatRub + ic.exciseRub + ic.antiDumpingRub
   }
 
@@ -168,20 +174,24 @@ export function calcDeal(deal: Deal): DealCalcResult {
   const totalAntiDumping = itemCalcs.reduce((s, ic) => s + ic.antiDumpingRub, 0)
   const totalCustomsPayments = totalDuty + totalVat + totalExcise + totalAntiDumping
 
-  /* --- customs fee (DS) --- */
+  const dutyByTnvedMap = new Map<string, number>()
+  for (const ic of itemCalcs) {
+    const key = ic.item.tnved?.trim() || "Без ТНВЭД"
+    dutyByTnvedMap.set(key, (dutyByTnvedMap.get(key) || 0) + ic.dutyRub)
+  }
+  const dutyByTnved = Array.from(dutyByTnvedMap.entries()).map(([tnved, amount]) => ({ tnved, amount }))
+
   const itemCount = deal.items.length
-  let customsFee: number
+  let declarationFee = 0
+  let customsFee = 0
   if (deal.declarant === "our") {
+    declarationFee = itemCount <= 5 ? 25000 : 25000 + (itemCount - 5) * 600
+    customsFee = calcCustomsFee2026(totalGoodsRub + deliveryChinaLocalRub)
     if (deal.customsCostManual > 0) {
-      customsFee = deal.customsCostManual
-    } else {
-      customsFee = itemCount <= 5 ? 25000 : 25000 + (itemCount - 5) * 600
+      declarationFee = deal.customsCostManual
     }
-  } else {
-    customsFee = 0
   }
 
-  /* --- importer commission (on invoice) --- */
   let invoiceCommissionRub = 0
   let invoiceCommissionOriginal = 0
   if (deal.importer === "longan" && deal.commissionPercent > 0) {
@@ -189,11 +199,9 @@ export function calcDeal(deal: Deal): DealCalcResult {
     invoiceCommissionRub = totalGoodsRub * (deal.commissionPercent / 100)
   }
 
-  /* --- flat commission & swift --- */
   const commissionImporterRub = deal.commissionImporterUsd * rates.usd
   const swiftRub = deal.swiftUsd * rates.usd
 
-  /* --- grand total --- */
   const grandTotal =
     totalGoodsRub +
     deliveryTotalRub +
@@ -201,6 +209,7 @@ export function calcDeal(deal: Deal): DealCalcResult {
     deliveryRussiaLocalRub +
     totalCustomsPayments +
     customsFee +
+    declarationFee +
     invoiceCommissionRub +
     commissionImporterRub +
     swiftRub
@@ -215,8 +224,10 @@ export function calcDeal(deal: Deal): DealCalcResult {
     deliveryChinaLocalRub,
     deliveryRussiaLocalRub,
     customsFee,
+    declarationFee,
     totalDuty,
     totalVat,
+    dutyByTnved,
     totalExcise,
     totalAntiDumping,
     totalCustomsPayments,
